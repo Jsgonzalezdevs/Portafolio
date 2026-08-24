@@ -1,0 +1,38 @@
+{
+  "id": "/ecosistema",
+  "name": "Ecosistema · LukApp",
+  "short_name": "LukApp",
+  "description": "Tus finanzas personales: cuentas, ahorro, deudas y análisis de extractos.",
+  "lang": "es-CO",
+  "dir": "ltr",
+  "start_url": "/ecosistema",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf9f6",
+  "theme_color": "#fbf9f6",
+  "icons": [
+    {
+      "src": "/lukapp-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/lukapp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/lukapp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Movimientos", "url": "/lukapp", "short_name": "Movimientos" },
+    { "name": "Cuentas", "url": "/lukapp", "short_name": "Cuentas" }
+  ]
+}

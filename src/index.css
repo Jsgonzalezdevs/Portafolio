@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  --color-bg-dark: #000000;
+  --color-text-light: #ffffff;
+  --color-text-muted: #9ca3af;
+  --color-text-dim: #6b7280;
+  --color-border-dark: #1f2937;
+  --color-border-muted: #374151;
+
+  /* Finance tool. A monochrome palette cannot encode sign, so these carry
+     direction — always paired with an icon or +/− so colour is never the only
+     cue. Tailwind v4 emits nothing for unused tokens, so the portfolio bundle
+     is unaffected. */
+  --color-fin-in: #34d399;
+  --color-fin-out: #fb7185;
+  --color-fin-warn: #fbbf24;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #000000;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom styles for animations and details */
+.text-gradient {
+  background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 50%, #8643ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection styling */
+::selection {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Ensure focus states are accessible and clean */
+button:focus-visible, a:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 4px;
+}
