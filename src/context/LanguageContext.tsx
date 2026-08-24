@@ -1,6 +1,6 @@
-import React, { createContext, useEffect, useState, useContext } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type Language = 'es' | 'en';
+export type Language = 'es' | 'en';
 
 interface Translations {
   navbar: {
@@ -32,6 +32,7 @@ interface Translations {
   projects: {
     title: string;
     subtitle: string;
+    lukappDesc: string;
     autosuiteDesc: string;
     wbsDesc: string;
     monkeymanDesc: string;
@@ -51,7 +52,7 @@ const translations: Record<Language, Translations> = {
       about: 'Sobre Mi',
       contact: 'Contacto',
       menu: 'Abrir menú de navegación',
-      login: 'Entrar al ecosistema',
+      login: 'LukApp — Finanzas',
     },
     hero: {
       role: 'Software Developer',
@@ -76,6 +77,7 @@ const translations: Record<Language, Translations> = {
     projects: {
       title: 'PROYECTOS',
       subtitle: 'E X P L O R E &nbsp; P R O Y E C T O S',
+      lukappDesc: 'Plataforma SaaS de finanzas personales asistida por IA, comandos de voz y analítica en tiempo real.',
       autosuiteDesc: 'Plataforma integral diseñada para la gestión automatizada de talleres automotrices, optimizando el control de inventarios, órdenes de servicio y roles de usuario.',
       wbsDesc: 'Proveedor líder de equipos médicos de alta calidad: bombas de infusión, monitores de pacientes, desfibriladores y sistemas de soporte vital en Colombia.',
       monkeymanDesc: 'Experiencia digital interactiva y portafolio para un estudio creativo, con una interfaz web innovadora estilo sistema operativo de escritorio.',
@@ -93,7 +95,7 @@ const translations: Record<Language, Translations> = {
       about: 'About Me',
       contact: 'Contact',
       menu: 'Open navigation menu',
-      login: 'Sign in to the ecosystem',
+      login: 'LukApp — Finance',
     },
     hero: {
       role: 'Software Developer',
@@ -103,8 +105,8 @@ const translations: Record<Language, Translations> = {
     about: {
       title: 'ABOUT ME',
       subtitle: 'E X P L O R E &nbsp; N O W',
-      p1: 'As a passionate software developer, I combine programming logic with a solid foundation in graphic design, allowing me to create intuitive and visually striking interfaces. Currently focused on web development, my experience centers on React, PHP, and CSS, where I merge functionality with a user-oriented aesthetic vision.',
-      p2: 'With the goal of creating elegant solutions, I navigate the world of software development with constant curiosity. My journey consists of transforming concepts into code, building fluid user experiences and challenging the limits of what is possible through precise technical execution and a creative approach.',
+      p1: 'As a passionate software developer, I blend programming logic with a solid background in graphic design, allowing me to build intuitive and visually compelling user interfaces. Currently focused on web development, my core expertise centers on React, PHP, and CSS, merging functional architecture with an aesthetic user-centered design approach.',
+      p2: 'Driven by the desire to build elegant solutions, I navigate the world of software development with relentless curiosity. My journey is about translating ideas into code, creating seamless user experiences, and pushing the boundaries of what is possible through precise technical execution and creative problem-solving.',
       moreBtn: 'More About Me',
     },
     experience: {
@@ -118,6 +120,7 @@ const translations: Record<Language, Translations> = {
     projects: {
       title: 'PROJECTS',
       subtitle: 'E X P L O R E &nbsp; P R O J E C T S',
+      lukappDesc: 'AI-powered personal finance SaaS platform featuring voice command logging and real-time insights.',
       autosuiteDesc: 'Comprehensive platform designed for the automated management of automotive workshops, optimizing inventory control, service orders, and user roles.',
       wbsDesc: 'Leading provider of high-quality medical equipment: infusion pumps, patient monitors, defibrillators, and life support systems in Colombia.',
       monkeymanDesc: 'Interactive digital experience and portfolio for a creative studio, featuring an innovative desktop OS style web interface.',
@@ -144,11 +147,6 @@ const STORAGE_KEY = 'portafolio:idioma';
 
 const isLanguage = (value: unknown): value is Language => value === 'es' || value === 'en';
 
-/**
- * A previously chosen language wins; otherwise the browser's own preference
- * decides, so an English-speaking visitor is not dropped into Spanish. Anything
- * we don't publish a translation for falls back to Spanish, the site's default.
- */
 const initialLanguage = (): Language => {
   if (typeof window === 'undefined') return 'es';
 
@@ -156,21 +154,15 @@ const initialLanguage = (): Language => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (isLanguage(stored)) return stored;
   } catch {
-    // Safari in private mode throws on localStorage access rather than
-    // returning null, and that must not take down the whole site.
+    // Storage unavailable
   }
 
   return navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'es';
 };
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Lazy initialiser: reading storage on every render would be wasted work, and
-  // this must resolve before first paint to avoid a flash of the wrong language.
   const [language, setLanguage] = useState<Language>(initialLanguage);
 
-  // Screen readers pick their pronunciation rules from this attribute, so it has
-  // to track the language actually on screen — otherwise the English copy gets
-  // read aloud with Spanish phonetics.
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
@@ -178,26 +170,17 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const toggleLanguage = () => {
     setLanguage((prev) => {
       const next = prev === 'es' ? 'en' : 'es';
-      // Persisted here rather than in the effect above: only a deliberate switch
-      // is a preference worth remembering. Writing on mount would freeze in
-      // whatever the detection happened to guess on the very first visit.
       try {
         localStorage.setItem(STORAGE_KEY, next);
       } catch {
-        // Private mode — the toggle still works, it just won't be remembered.
+        // Storage unavailable
       }
       return next;
     });
   };
 
-  const value = {
-    language,
-    t: translations[language],
-    toggleLanguage,
-  };
-
   return (
-    <LanguageContext.Provider value={value}>
+    <LanguageContext.Provider value={{ language, t: translations[language], toggleLanguage }}>
       {children}
     </LanguageContext.Provider>
   );
@@ -205,7 +188,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export const useLanguage = () => {
   const context = useContext(LanguageContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useLanguage must be used within a LanguageProvider');
   }
   return context;

@@ -18,11 +18,11 @@ export const Projects: React.FC = () => {
   const projectsList: Project[] = [
     {
       title: 'LukApp',
-      description: 'Plataforma SaaS de finanzas personales asistida por IA, comandos de voz y analítica en tiempo real.',
-      logoSrc: '/finanzas-icon-192.png',
+      description: t.projects.lukappDesc,
+      logoSrc: '/lukapp-icon-512.png',
       link: 'https://lukapp.app',
-      bgClass: 'bg-white',
-      pClass: 'p-1',
+      bgClass: 'bg-[#18181b]',
+      pClass: 'p-1 rounded-lg',
     },
     {
       title: 'AutoSuite',
