@@ -9,8 +9,9 @@ import { AboutMe } from './components/AboutMe';
 import { Experience } from './components/Experience';
 import { Projects } from './components/Projects';
 import { Footer } from './components/Footer';
+import { EllaYYo } from './components/EllaYYo';
 
-const App: React.FC = () => {
+const Portfolio: React.FC = () => {
   // Una sola vez por carga. El portafolio es una página con secciones ancladas,
   // no rutas, así que no hay navegación que volver a contar.
   useEffect(() => {
@@ -40,6 +41,11 @@ const App: React.FC = () => {
       </div>
     </LanguageProvider>
   );
+};
+
+const App: React.FC = () => {
+  const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+  return path === '/ellayyo' ? <EllaYYo /> : <Portfolio />;
 };
 
 export default App;
