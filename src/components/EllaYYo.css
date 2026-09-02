@@ -117,32 +117,20 @@
 .gate-signature { position: absolute; bottom: 20px; margin: 0; color: rgba(25,48,75,.6); font-size: .72rem; letter-spacing: .04em; }
 .secret-toast, .egg-toast { position: fixed; z-index: 10002; left: 50%; bottom: 24px; width: min(430px, calc(100% - 32px)); transform: translateX(-50%); padding: 15px 20px; border-radius: 18px; color: white; background: #174f92; box-shadow: 0 14px 44px rgba(23,79,146,.3); font-size: .9rem; font-weight: 700; }
 
-.stitch-friend {
+.gate-stitch-cutout {
   position: absolute;
-  z-index: 4;
-  top: clamp(22px, 5vw, 50px);
-  right: clamp(18px, 5vw, 60px);
-  width: 112px;
-  height: 94px;
+  z-index: 5;
+  top: clamp(8px, 3vw, 34px);
+  right: clamp(5px, 3vw, 38px);
+  width: clamp(155px, 18vw, 250px);
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
-  filter: drop-shadow(0 12px 12px rgba(33,86,139,.18));
+  filter: drop-shadow(0 18px 18px rgba(29,75,119,.2));
   animation: stitch-float 3.7s ease-in-out infinite;
 }
-
-.stitch-head { position: absolute; left: 25px; top: 9px; width: 63px; height: 72px; border-radius: 49% 49% 44% 44%; background: #4a9fea; border: 3px solid #1766ae; }
-.stitch-ear { position: absolute; top: 10px; width: 55px; height: 29px; border: 3px solid #1766ae; background: #4a9fea; }
-.stitch-ear::after { content: ''; position: absolute; inset: 5px 7px; border-radius: inherit; background: #d98ec1; }
-.stitch-ear-left { left: 0; border-radius: 75% 20% 65% 25%; transform: rotate(18deg); }
-.stitch-ear-right { right: 0; border-radius: 20% 75% 25% 65%; transform: rotate(-18deg); }
-.stitch-eye { position: absolute; top: 20px; width: 15px; height: 20px; border-radius: 50%; background: #172d48; box-shadow: inset 4px 3px 0 white; }
-.stitch-eye-left { left: 13px; transform: rotate(10deg); }
-.stitch-eye-right { right: 13px; transform: rotate(-10deg); }
-.stitch-nose { position: absolute; left: 50%; top: 39px; width: 17px; height: 12px; transform: translateX(-50%); border-radius: 50%; background: #174f92; }
-.stitch-smile { position: absolute; left: 21px; bottom: 9px; width: 21px; height: 9px; border-bottom: 2px solid #174f92; border-radius: 0 0 50% 50%; }
-.stitch-flower { position: absolute; z-index: 2; left: 24px; top: 0; color: #ffcf4b; font-size: 28px; transform: rotate(-15deg); }
+.gate-stitch-cutout img { display: block; width: 100%; height: auto; }
 
 .ellayyo { overflow: hidden; background: var(--cream); }
 .ellayyo main { display: block; }
@@ -221,10 +209,29 @@
 .photo-5, .photo-6 { grid-column: span 6; grid-row: span 4; }
 .photo-1 img, .photo-3 img { object-position: center 40%; }
 
-.stitch-section { position: relative; display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 50px; width: min(1000px, calc(100% - 40px)); margin: 0 auto 130px; padding: 65px 70px; border: 1px solid #bcd9ec; border-radius: 38px; background: #e6f5ff; }
-.stitch-section .stitch-friend { position: relative; inset: auto; width: 180px; transform: scale(1.35); }
-.stitch-section h2 { margin: 10px 0; font: 500 clamp(2rem, 4.5vw, 4rem)/1.04 Georgia, serif; }
-.stitch-section p { max-width: 550px; margin: 0; color: #627589; line-height: 1.7; }
+.stitch-section { position: relative; width: min(1120px, calc(100% - 40px)); margin: 0 auto 130px; padding: clamp(52px, 7vw, 82px); border: 1px solid #bcd9ec; border-radius: 38px; overflow: hidden; background: linear-gradient(145deg, #eaf8ff 0%, #d7efff 62%, #ffe8f0 100%); }
+.stitch-section::before { content: '626'; position: absolute; right: -20px; top: -58px; color: rgba(35,119,213,.07); font: 800 clamp(9rem, 25vw, 18rem)/1 Georgia, serif; }
+.stitch-section .section-tag { position: relative; z-index: 1; }
+.stitch-heading { position: relative; z-index: 1; display: grid; grid-template-columns: 1.5fr .65fr; align-items: end; gap: 46px; margin-bottom: 48px; }
+.stitch-heading h2 { max-width: 720px; margin: 10px 0 0; font: 500 clamp(2.5rem, 5vw, 4.8rem)/1 Georgia, serif; letter-spacing: -.045em; }
+.stitch-heading p { margin: 0 0 8px; color: #607489; line-height: 1.75; }
+.stitch-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: 82px; gap: 15px; }
+.stitch-card { position: relative; grid-column: span 4; grid-row: span 3; padding: 0; border: 5px solid rgba(255,255,255,.9); border-radius: 24px; overflow: hidden; background: #92c9ed; box-shadow: 0 16px 34px rgba(27,80,126,.16); cursor: pointer; transform: rotate(var(--tilt, 0)); transition: transform .35s ease, box-shadow .35s ease; }
+.stitch-card:nth-child(2n) { --tilt: 1deg; }
+.stitch-card:nth-child(3n) { --tilt: -1.2deg; }
+.stitch-card:hover, .stitch-card:focus-visible { z-index: 2; transform: translateY(-7px) rotate(0) scale(1.025); box-shadow: 0 22px 44px rgba(27,80,126,.23); }
+.stitch-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .55s ease; }
+.stitch-card:hover img { transform: scale(1.055); }
+.stitch-card span { position: absolute; inset: auto 9px 9px; padding: 10px 12px; border-radius: 13px; color: white; background: rgba(16,48,80,.75); backdrop-filter: blur(8px); font: italic .78rem/1.35 Georgia, serif; }
+.stitch-card-1 { grid-column: span 5; grid-row: span 4; }
+.stitch-card-2 { grid-column: span 3; grid-row: span 4; }
+.stitch-card-3 { grid-column: span 4; grid-row: span 4; }
+.stitch-card-4, .stitch-card-5 { grid-column: span 3; grid-row: span 3; }
+.stitch-card-6 { grid-column: span 4; grid-row: span 3; }
+.stitch-card-7 { grid-column: span 2; grid-row: span 3; }
+.stitch-card-1 img { object-position: 50% 22%; }
+.stitch-card-2 img { object-position: center 38%; }
+.stitch-credit { position: relative; z-index: 1; margin: 24px 0 0; color: #7890a4; font-size: .64rem; text-align: right; }
 
 .final-section { padding: 120px 20px; text-align: center; background: #ffdfe9; }
 .final-flower { margin-bottom: 24px; color: #ef6f9b; }
@@ -236,11 +243,12 @@
 .love-footer { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 30px max(20px, calc((100% - 1120px) / 2)); color: #c9d7e4; background: #132c45; }
 .love-footer > span { color: white; font: 700 1.5rem Georgia, serif; }
 .love-footer p { margin: 0; font-size: .72rem; text-align: center; }
+.love-footer p small { display: block; margin-top: 5px; color: #91a8bb; font-size: .58rem; }
 .love-footer a { display: flex; align-items: center; gap: 7px; color: white; font-size: .72rem; text-decoration: none; }
 .egg-toast { cursor: pointer; text-align: center; }
 
 @keyframes gate-orbit { to { transform: rotate(360deg); } }
-@keyframes stitch-float { 50% { transform: translateY(-8px) rotate(2deg); } }
+@keyframes stitch-float { 0%, 100% { transform: scale(var(--stitch-scale, 1)) translateY(0); } 50% { transform: scale(var(--stitch-scale, 1)) translateY(-8px) rotate(2deg); } }
 @keyframes float-heart { from { transform: translateY(0) rotate(0); opacity: 0; } 15% { opacity: 1; } to { transform: translateY(-115vh) rotate(130deg); opacity: 0; } }
 @keyframes music-pulse { 0% { box-shadow: 0 0 0 0 rgba(35,119,213,.35); } 70% { box-shadow: 0 0 0 10px rgba(35,119,213,0); } }
 
@@ -250,7 +258,7 @@
   .gate-card h1 { font-size: clamp(2.8rem, 14vw, 4.1rem); }
   .button-arena { min-height: 210px; flex-direction: column; }
   .yes-button, .no-button { min-width: 170px; }
-  .stitch-friend { top: 9px; right: 8px; transform: scale(.72); }
+  .gate-stitch-cutout { --stitch-scale: .72; top: 2px; right: -16px; width: 155px; transform-origin: top right; }
   .gate-signature { font-size: .62rem; }
   .love-hero { min-height: 92svh; }
   .love-hero > img { object-position: 57% center; }
@@ -270,12 +278,15 @@
   .photo-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin-inline: -15px; padding: 0 15px 20px; }
   .photo-card { flex: 0 0 82vw; height: 510px; scroll-snap-align: center; }
   .photo-card span { opacity: 1; transform: none; }
-  .stitch-section { grid-template-columns: 1fr; gap: 26px; padding: 54px 28px 38px; text-align: center; }
-  .stitch-section .stitch-friend { justify-self: center; transform: scale(1.15); }
+  .stitch-section { width: min(100% - 24px, 1120px); margin-bottom: 80px; padding: 46px 18px 24px; border-radius: 28px; }
+  .stitch-heading { grid-template-columns: 1fr; gap: 22px; }
+  .stitch-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -18px; padding: 8px 18px 24px; }
+  .stitch-card, .stitch-card-1, .stitch-card-2, .stitch-card-3, .stitch-card-4, .stitch-card-5, .stitch-card-6, .stitch-card-7 { flex: 0 0 76vw; height: 400px; scroll-snap-align: center; }
+  .stitch-credit { text-align: center; }
   .love-footer { flex-direction: column; padding-block: 36px 95px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .forgiveness-gate::before, .forgiveness-gate::after, .stitch-friend, .floating-hearts span, .music-pulse { animation: none; }
+  .forgiveness-gate::before, .forgiveness-gate::after, .gate-stitch-cutout, .floating-hearts span, .music-pulse { animation: none; }
   .photo-card img, .letter-paper { transition: none; }
 }

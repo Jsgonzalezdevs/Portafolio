@@ -14,30 +14,31 @@ const photos = [
   { src: '/ellayyo/abrazo.webp', alt: 'Kamila y Julián abrazándose', note: 'Quiero que mis brazos vuelvan a sentirse como paz.' },
 ];
 
-const escapeLabels = [
-  'No',
-  '¿Segura? 🥺',
-  'Piénsalo un potito',
-  'Stitch dice que sí 💙',
-  'Última oportunidad 👀',
-  'Bueno, te doy tiempo',
+const stitchPhotos = [
+  { src: '/ellayyo/stitch/stitch-live-bed.webp', alt: 'Stitch con un collar de flores', note: 'Stitch vino bonito porque la ocasión lo merece.' },
+  { src: '/ellayyo/stitch/stitch-chair.webp', alt: 'Stitch descansando con gafas de sol', note: 'Esperando pacientemente a que presiones el botón azul.' },
+  { src: '/ellayyo/stitch/stitch-live-soda.webp', alt: 'Stitch cantando con mucha emoción', note: 'Prométeme, versión experimento 626.' },
+  { src: '/ellayyo/stitch/stitch-family.webp', alt: 'Stitch sonriendo en la playa', note: 'Esa es la cara que pondré si dices que sí.' },
+  { src: '/ellayyo/stitch/stitch-elvis.webp', alt: 'Stitch tocando guitarra en la playa', note: 'Una serenata intergaláctica para ti.' },
+  { src: '/ellayyo/stitch/stitch-glitch.webp', alt: 'Lilo y Stitch compartiendo un momento juntos', note: 'Ohana también es reparar lo que importa.' },
+  { src: '/ellayyo/stitch/stitch-hero.webp', alt: 'Lilo y Stitch bailando juntos', note: 'Y después del perdón, un bailecito potito.' },
 ];
 
-function StitchFriend({ onSecret }: { onSecret?: () => void }) {
-  return (
-    <button className="stitch-friend" type="button" onClick={onSecret} aria-label="Descubrir un mensaje secreto de Stitch">
-      <span className="stitch-ear stitch-ear-left" />
-      <span className="stitch-ear stitch-ear-right" />
-      <span className="stitch-head">
-        <span className="stitch-eye stitch-eye-left" />
-        <span className="stitch-eye stitch-eye-right" />
-        <span className="stitch-nose" />
-        <span className="stitch-smile" />
-      </span>
-      <span className="stitch-flower">✿</span>
-    </button>
-  );
-}
+const escapeLabels = [
+  'No',
+  '¿Cómo que no? 🥺',
+  'Piénsalo un potito',
+  'Stitch no acepta ese no 💙',
+  'Ajá… inténtalo otra vez',
+  'Ese botón no sirve 👀',
+  '¿Y si te digo porfis?',
+  'No me rindo tan fácil',
+  'Mira el botón azulito',
+  'Stitch votó que sí',
+  'Te amo, piénsalo otra vez',
+  'Nop, por aquí tampoco',
+  'Hasta que digas que sí 💙',
+];
 
 function ForgivenessGate({ onYes }: { onYes: () => void }) {
   const arenaRef = useRef<HTMLDivElement>(null);
@@ -47,17 +48,12 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
   const [secret, setSecret] = useState(false);
 
   const moveNo = () => {
-    if (escapes >= escapeLabels.length - 1) {
-      setNeedsTime(true);
-      return;
-    }
-
     const arena = arenaRef.current;
-    const maxX = Math.max(90, (arena?.clientWidth ?? 360) / 2 - 72);
-    const maxY = Math.max(55, (arena?.clientHeight ?? 210) / 2 - 30);
+    const maxX = Math.min(145, Math.max(65, (arena?.clientWidth ?? 360) / 2 - 88));
+    const maxY = Math.min(72, Math.max(48, (arena?.clientHeight ?? 210) / 2 - 34));
     const direction = escapes % 2 === 0 ? 1 : -1;
     setPosition({
-      x: direction * (40 + Math.random() * maxX),
+      x: direction * (35 + Math.random() * maxX),
       y: (Math.random() * 2 - 1) * maxY,
     });
     setEscapes((value) => value + 1);
@@ -66,7 +62,9 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
   return (
     <div className="forgiveness-gate">
       <div className="gate-stars" aria-hidden="true">✦ · ✧ · ✦ · ✧ · ✦</div>
-      <StitchFriend onSecret={() => setSecret(true)} />
+      <button className="gate-stitch-cutout" type="button" onClick={() => setSecret(true)} aria-label="Descubrir un mensaje secreto de Stitch">
+        <img src="/ellayyo/stitch/stitch-transparent.png" alt="Stitch enamorado" />
+      </button>
       <div className="gate-card">
         <span className="eyebrow">Una preguntita antes de entrar…</span>
         <h1>¿Me perdonas,<br /><em>mi 11:11?</em></h1>
@@ -88,7 +86,7 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
             onFocus={moveNo}
             aria-label="Todavía no"
           >
-            {escapeLabels[Math.min(escapes, escapeLabels.length - 1)]}
+            {escapeLabels[escapes % escapeLabels.length]}
           </button>
         </div>
 
@@ -262,12 +260,23 @@ export function EllaYYo() {
         </section>
 
         <section className="stitch-section">
-          <StitchFriend onSecret={() => setEasterEggs((value) => value + 1)} />
-          <div>
-            <span className="eyebrow">Mensaje intergaláctico</span>
-            <h2>Mi lugar favorito sigue siendo contigo.</h2>
-            <p>Incluso cuando toca reparar, aprender y volver a intentarlo con más amor.</p>
+          <div className="section-tag"><span>05</span> El comité intergaláctico del perdón</div>
+          <div className="stitch-heading">
+            <div>
+              <span className="eyebrow">Stitch también vino a insistir</span>
+              <h2>Ohana significa que nadie se rinde con quien ama.</h2>
+            </div>
+            <p>Reuní un pequeño ejército azul para recordarte que mi lugar favorito sigue siendo contigo.</p>
           </div>
+          <div className="stitch-grid">
+            {stitchPhotos.map((photo, index) => (
+              <button type="button" className={`stitch-card stitch-card-${index + 1}`} key={photo.src} onClick={() => setEasterEggs((value) => value + 1)}>
+                <img src={photo.src} alt={photo.alt} loading="lazy" />
+                <span>{photo.note}</span>
+              </button>
+            ))}
+          </div>
+          <p className="stitch-credit">Imágenes promocionales de Lilo &amp; Stitch © Disney.</p>
         </section>
 
         <section className="final-section">
@@ -289,7 +298,7 @@ export function EllaYYo() {
 
       <footer className="love-footer">
         <span>J + K</span>
-        <p>Hecho a mano, con amor, errores de ortografía y mucho potito corazón.</p>
+        <p>Hecho a mano, con amor, errores de ortografía y mucho potito corazón.<small>Stitch PNG: PNGimg · CC BY-NC 4.0</small></p>
         <a href={`https://www.youtube.com/watch?v=${YOUTUBE_ID}`} target="_blank" rel="noreferrer"><Music2 size={16} /> Escuchar Prométeme</a>
       </footer>
 
