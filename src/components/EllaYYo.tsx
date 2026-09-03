@@ -39,6 +39,87 @@ const escapeLabels = [
   'Nop, por aquí tampoco',
 ];
 
+const FIRST_KISS_YEAR = 2024;
+const BOGOTA_TIME_ZONE = 'America/Bogota';
+
+function anniversaryDate(year: number) {
+  return new Date(Date.UTC(year, 8, 3, 22, 0, 0));
+}
+
+function getAnniversaryCountdown(now: Date) {
+  const bogotaYear = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: BOGOTA_TIME_ZONE,
+    year: 'numeric',
+  }).format(now));
+  let targetYear = Math.max(2026, bogotaYear);
+  let target = anniversaryDate(targetYear);
+
+  // Keep the four zeroes visible for one full second before starting the next year.
+  if (now.getTime() > target.getTime() + 999) {
+    targetYear += 1;
+    target = anniversaryDate(targetYear);
+  }
+
+  const totalSeconds = Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const bogotaDateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BOGOTA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const getDatePart = (type: Intl.DateTimeFormatPartTypes) => bogotaDateParts.find((part) => part.type === type)?.value ?? '';
+  const bogotaDay = `${getDatePart('year')}-${getDatePart('month')}-${getDatePart('day')}`;
+
+  return { days, hours, minutes, seconds, targetYear, bogotaDay };
+}
+
+function AnniversaryCountdown() {
+  const [countdown, setCountdown] = useState(() => getAnniversaryCountdown(new Date()));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdown(getAnniversaryCountdown(new Date())), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const anniversaryNumber = countdown.targetYear - FIRST_KISS_YEAR;
+  const isTomorrow = countdown.bogotaDay === `${countdown.targetYear}-09-02`;
+  const isToday = countdown.bogotaDay === `${countdown.targetYear}-09-03`;
+  const helper = countdown.targetYear === 2026
+    ? `${isTomorrow ? 'Mañana' : isToday ? 'Hoy' : 'El 3 de septiembre'} a las 5 de la tarde se cumplen dos años exactos`
+    : `Ahora cada segundo cuenta para celebrar ${anniversaryNumber} años de ese momento`;
+
+  const units = [
+    { value: countdown.days, label: 'Días' },
+    { value: countdown.hours, label: 'Horas' },
+    { value: countdown.minutes, label: 'Minutos' },
+    { value: countdown.seconds, label: 'Segundos' },
+  ];
+
+  return (
+    <section className="anniversary-section">
+      <div className="anniversary-copy">
+        <span className="anniversary-kicker">Nuestro primer beso · 03 09 2024</span>
+        <h2>El 3 de septiembre cumplimos dos años de nuestro primer beso</h2>
+        <p>{helper}</p>
+        <small>Próximo beso-versario · 3 de septiembre de {countdown.targetYear} · 5:00 p m</small>
+      </div>
+      <div className="countdown-clock" aria-live="polite" aria-label={`Faltan ${countdown.days} días ${countdown.hours} horas ${countdown.minutes} minutos y ${countdown.seconds} segundos`}>
+        {units.map((unit) => (
+          <div className="countdown-unit" key={unit.label}>
+            <strong>{String(unit.value).padStart(2, '0')}</strong>
+            <span>{unit.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="anniversary-heart" aria-hidden="true">♡</div>
+    </section>
+  );
+}
+
 function ForgivenessGate({ onYes }: { onYes: () => void }) {
   const arenaRef = useRef<HTMLDivElement>(null);
   const yesRef = useRef<HTMLButtonElement>(null);
@@ -345,6 +426,8 @@ export function EllaYYo() {
           </div>
         </section>
 
+        <AnniversaryCountdown />
+
         <section className="stitch-section">
           <button
             className={`stitch-626-secret ${stitch626Secret ? 'is-revealed' : ''}`}
@@ -358,7 +441,7 @@ export function EllaYYo() {
             />
             <span>{stitch626Secret ? 'Meega nala kweesta' : 'Dame click'}</span>
           </button>
-          <div className="section-tag"><span>05</span> El comité intergaláctico del perdón</div>
+          <div className="section-tag"><span>06</span> El comité intergaláctico del perdón</div>
           <div className="stitch-heading">
             <div>
               <span className="eyebrow">Stitch también vino a insistir</span>
