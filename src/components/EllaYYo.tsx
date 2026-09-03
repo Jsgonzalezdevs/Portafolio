@@ -285,6 +285,7 @@ export function EllaYYo() {
   const [easterEggs, setEasterEggs] = useState(0);
   const [heroPrompt, setHeroPrompt] = useState(false);
   const [stitch626Secret, setStitch626Secret] = useState(false);
+  const [activeStitchPhoto, setActiveStitchPhoto] = useState<number | null>(null);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -451,7 +452,14 @@ export function EllaYYo() {
           </div>
           <div className="stitch-grid">
             {stitchPhotos.map((photo, index) => (
-              <button type="button" className={`stitch-card stitch-card-${index + 1}`} key={photo.src} onClick={() => setEasterEggs((value) => value + 1)}>
+              <button
+                type="button"
+                className={`stitch-card stitch-card-${index + 1} ${activeStitchPhoto === index ? 'is-caption-open' : ''}`}
+                key={photo.src}
+                onClick={() => setActiveStitchPhoto((current) => current === index ? null : index)}
+                aria-expanded={activeStitchPhoto === index}
+                aria-label={`${photo.alt}. ${activeStitchPhoto === index ? 'Ocultar mensaje' : 'Mostrar mensaje'}`}
+              >
                 <img src={photo.src} alt={photo.alt} loading="lazy" />
                 <span>{photo.note}</span>
               </button>
