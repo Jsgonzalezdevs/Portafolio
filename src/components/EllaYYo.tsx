@@ -201,6 +201,7 @@ export function EllaYYo() {
   const [finalMessage, setFinalMessage] = useState(false);
   const [easterEggs, setEasterEggs] = useState(0);
   const [heroPrompt, setHeroPrompt] = useState(false);
+  const [stitch626Secret, setStitch626Secret] = useState(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -313,6 +314,18 @@ export function EllaYYo() {
         </section>
 
         <section className="stitch-section">
+          <button
+            className={`stitch-626-secret ${stitch626Secret ? 'is-revealed' : ''}`}
+            type="button"
+            onClick={(event) => {
+              setStitch626Secret(true);
+              event.currentTarget.blur();
+            }}
+            aria-label={stitch626Secret ? 'Akamalacuista' : 'Descubrir la palabra secreta de Stitch'}
+          >
+            <img src="/ellayyo/stitch/stitch-transparent.png" alt="Stitch" />
+            <span>{stitch626Secret ? 'Akamalacuista' : 'Dame click'}</span>
+          </button>
           <div className="section-tag"><span>05</span> El comité intergaláctico del perdón</div>
           <div className="stitch-heading">
             <div>
