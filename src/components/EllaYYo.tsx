@@ -115,7 +115,7 @@ function AnniversaryCountdown({ onSecret }: { onSecret: (message: string) => voi
           </div>
         ))}
       </div>
-      <div className="anniversary-heart" aria-hidden="true" onDoubleClick={() => onSecret('Nuestro primer beso sigue siendo uno de mis lugares favoritos 🤍')}>♡</div>
+      <div className="anniversary-heart" aria-hidden="true" onClick={() => onSecret('Nuestro primer beso sigue siendo uno de mis lugares favoritos 🤍')}>♡</div>
     </section>
   );
 }
@@ -273,7 +273,7 @@ function LoveLetter({ onSecret }: { onSecret: (message: string) => void }) {
             className="letter-signature"
             onClick={() => {
               signatureClicks.current += 1;
-              if (signatureClicks.current === 3) onSecret('Firmado tres veces porque te escogería tres y mil veces más 💙');
+              if (signatureClicks.current === 2) onSecret('Firmado dos veces porque te escogería dos y mil veces más 💙');
             }}
           >— Tu gordito Julián</p>
         </article>
@@ -372,7 +372,7 @@ export function EllaYYo() {
 
   const toggleMusicWithSecret = () => {
     musicClicksRef.current += 1;
-    if (musicClicksRef.current === 4) {
+    if (musicClicksRef.current === 3) {
       revealSecret('La canción se puede pausar pero lo que siento por ti no 💙');
     }
     toggleMusic();
@@ -466,7 +466,7 @@ export function EllaYYo() {
 
       <main>
         <section className="truth-section">
-          <div className="section-tag" onDoubleClick={() => revealSecret('Secreto 01: contigo prefiero la paz antes que tener la razón')}><span>01</span> Primero, la verdad</div>
+          <div className="section-tag" onClick={() => revealSecret('Secreto 01: contigo prefiero la paz antes que tener la razón')}><span>01</span> Primero, la verdad</div>
           <p className="big-truth">No quiero tener la razón.<br /><em>Quiero entenderte mejor.</em></p>
           <div className="truth-grid">
             <p>Una buena intención pierde su valor cuando la forma hiere.</p>
@@ -488,7 +488,7 @@ export function EllaYYo() {
         </section>
 
         <section className="gallery-section">
-          <div className="section-tag" onDoubleClick={() => revealSecret('Secreto 04: todavía faltan muchos recuerdos por guardar')}><span>04</span> Nosotros, en momentos bonitos</div>
+          <div className="section-tag" onClick={() => revealSecret('Secreto 04: todavía faltan muchos recuerdos por guardar')}><span>04</span> Nosotros, en momentos bonitos</div>
           <div className="gallery-heading">
             <h2>Un pedacito de<br />todo lo nuestro.</h2>
             <p>Toca cada foto. Algunas cosas bonitas merecen volver a mirarse sin prisa.</p>
@@ -547,7 +547,7 @@ export function EllaYYo() {
         </section>
 
         <section className="final-section">
-          <Flower2 className="final-flower" size={46} onDoubleClick={() => revealSecret('Hasta esta flor sabe que tú sigues siendo mi detalle favorito 🌸')} />
+          <Flower2 className="final-flower" size={46} onClick={() => revealSecret('Hasta esta flor sabe que tú sigues siendo mi detalle favorito 🌸')} />
           <span className="eyebrow">Una promesa que empieza hoy</span>
           <h2>Quiero que mis acciones<br />te den la paz que mis palabras no supieron darte.</h2>
           {!finalMessage ? (
@@ -566,7 +566,7 @@ export function EllaYYo() {
       <footer className="love-footer">
         <span onClick={() => {
           footerClicksRef.current += 1;
-          if (footerClicksRef.current === 3) revealSecret('J + K: una historia con errores pero también con mucho amor');
+          if (footerClicksRef.current === 2) revealSecret('J + K: una historia con errores pero también con mucho amor');
         }}>J + K</span>
         <p>Hecho a mano, con amor, errores de ortografía y mucho potito corazón.<small>Stitch PNG: PNGimg · CC BY-NC 4.0</small></p>
         <a href={`https://www.youtube.com/watch?v=${YOUTUBE_ID}`} target="_blank" rel="noreferrer"><Music2 size={16} /> Escuchar Prométeme</a>
