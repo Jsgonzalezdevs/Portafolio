@@ -196,6 +196,8 @@ function LoveLetter() {
 
 export function EllaYYo() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const stitchVoiceRef = useRef<HTMLAudioElement>(null);
+  const resumeMusicAfterStitchRef = useRef(false);
   const [accepted, setAccepted] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
   const [finalMessage, setFinalMessage] = useState(false);
@@ -244,36 +246,41 @@ export function EllaYYo() {
     setStitch626Secret(true);
     event.currentTarget.blur();
 
-    if ('speechSynthesis' in window) {
-      const audio = audioRef.current;
-      const resumeMusicAfterPhrase = Boolean(audio && !audio.paused);
-      audio?.pause();
-      window.speechSynthesis.cancel();
-      const phrase = new SpeechSynthesisUtterance('Meega nala kweesta');
-      phrase.lang = 'en-US';
-      phrase.pitch = 1.65;
-      phrase.rate = 0.72;
-      phrase.volume = 1;
-      const resumeMusic = () => {
-        if (resumeMusicAfterPhrase && audio) {
-          void audio.play().catch(() => setMusicOn(false));
-        }
-      };
-      phrase.onend = resumeMusic;
-      phrase.onerror = resumeMusic;
-      window.speechSynthesis.speak(phrase);
+    const music = audioRef.current;
+    const voice = stitchVoiceRef.current;
+    if (!voice) return;
+
+    if (music && !music.paused) {
+      resumeMusicAfterStitchRef.current = true;
     }
+    music?.pause();
+    voice.pause();
+    voice.currentTime = 0;
+
+    const resumeMusic = () => {
+      if (resumeMusicAfterStitchRef.current && music) {
+        resumeMusicAfterStitchRef.current = false;
+        void music.play().catch(() => setMusicOn(false));
+      }
+    };
+
+    voice.onended = resumeMusic;
+    voice.onerror = resumeMusic;
+    void voice.play().catch(resumeMusic);
   };
 
   const soundtrack = (
-    <audio
-      ref={audioRef}
-      src={SONG_PREVIEW}
-      loop
-      preload="none"
-      onPlay={() => setMusicOn(true)}
-      onPause={() => setMusicOn(false)}
-    />
+    <>
+      <audio
+        ref={audioRef}
+        src={SONG_PREVIEW}
+        loop
+        preload="none"
+        onPlay={() => setMusicOn(true)}
+        onPause={() => setMusicOn(false)}
+      />
+      <audio ref={stitchVoiceRef} src="/ellayyo/stitch/meega-nala-kweesta.mp3" preload="auto" />
+    </>
   );
 
   return (
