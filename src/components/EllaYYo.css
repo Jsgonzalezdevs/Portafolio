@@ -213,10 +213,11 @@
 .stitch-section::before { content: '626'; position: absolute; right: -20px; top: -58px; color: rgba(35,119,213,.07); font: 800 clamp(9rem, 25vw, 18rem)/1 Georgia, serif; }
 .stitch-626-secret { position: absolute; z-index: 3; top: 4px; right: clamp(35px, 8vw, 95px); width: clamp(108px, 13vw, 150px); padding: 0; border: 0; background: transparent; cursor: pointer; filter: drop-shadow(0 13px 13px rgba(28,75,116,.18)); animation: secret-stitch-bob 3s ease-in-out infinite; }
 .stitch-626-secret img { display: block; width: 100%; height: auto; }
-.stitch-626-secret span { position: absolute; left: -72px; top: 27px; min-width: 88px; padding: 9px 12px; border-radius: 16px 16px 4px 16px; color: var(--blue-dark); background: white; box-shadow: 0 9px 24px rgba(29,78,121,.17); font-size: .68rem; font-weight: 900; letter-spacing: .03em; }
+.stitch-626-secret span { position: absolute; left: -72px; top: 27px; min-width: 88px; padding: 9px 12px; border-radius: 16px 16px 4px 16px; color: var(--blue-dark); background: white; box-shadow: 0 9px 24px rgba(29,78,121,.17); font-size: .68rem; font-weight: 900; letter-spacing: .03em; white-space: nowrap; }
 .stitch-626-secret span::after { content: ''; position: absolute; right: -8px; bottom: 2px; border-width: 8px 0 0 10px; border-style: solid; border-color: transparent transparent transparent white; }
 .stitch-626-secret.is-revealed span { min-width: 126px; color: white; background: var(--blue-dark); transform: rotate(-3deg) scale(1.07); }
 .stitch-626-secret.is-revealed span::after { border-left-color: var(--blue-dark); }
+.stitch-626-secret.is-revealed img { animation: stitch-angry-pop .5s cubic-bezier(.2,.9,.25,1.25); }
 .stitch-section .section-tag { position: relative; z-index: 1; }
 .stitch-heading { position: relative; z-index: 1; display: grid; grid-template-columns: 1.5fr .65fr; align-items: end; gap: 46px; margin-bottom: 48px; }
 .stitch-heading h2 { max-width: 720px; margin: 10px 0 0; font: 500 clamp(2.5rem, 5vw, 4.8rem)/1 Georgia, serif; letter-spacing: -.045em; }
@@ -255,6 +256,7 @@
 @keyframes gate-orbit { to { transform: rotate(360deg); } }
 @keyframes stitch-float { 0%, 100% { transform: scale(var(--stitch-scale, 1)) translateY(0); } 50% { transform: scale(var(--stitch-scale, 1)) translateY(-8px) rotate(2deg); } }
 @keyframes secret-stitch-bob { 50% { transform: translateY(-6px) rotate(2deg); } }
+@keyframes stitch-angry-pop { 0% { opacity: .2; transform: scale(.72) rotate(-8deg); } 70% { transform: scale(1.08) rotate(3deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes float-heart { from { transform: translateY(0) rotate(0); opacity: 0; } 15% { opacity: 1; } to { transform: translateY(-115vh) rotate(130deg); opacity: 0; } }
 @keyframes music-pulse { 0% { box-shadow: 0 0 0 0 rgba(35,119,213,.35); } 70% { box-shadow: 0 0 0 10px rgba(35,119,213,0); } }
 

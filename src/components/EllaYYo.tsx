@@ -240,6 +240,31 @@ export function EllaYYo() {
     }
   };
 
+  const revealStitch626 = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setStitch626Secret(true);
+    event.currentTarget.blur();
+
+    if ('speechSynthesis' in window) {
+      const audio = audioRef.current;
+      const resumeMusicAfterPhrase = Boolean(audio && !audio.paused);
+      audio?.pause();
+      window.speechSynthesis.cancel();
+      const phrase = new SpeechSynthesisUtterance('Meega nala kweesta');
+      phrase.lang = 'en-US';
+      phrase.pitch = 1.65;
+      phrase.rate = 0.72;
+      phrase.volume = 1;
+      const resumeMusic = () => {
+        if (resumeMusicAfterPhrase && audio) {
+          void audio.play().catch(() => setMusicOn(false));
+        }
+      };
+      phrase.onend = resumeMusic;
+      phrase.onerror = resumeMusic;
+      window.speechSynthesis.speak(phrase);
+    }
+  };
+
   const soundtrack = (
     <audio
       ref={audioRef}
@@ -317,14 +342,14 @@ export function EllaYYo() {
           <button
             className={`stitch-626-secret ${stitch626Secret ? 'is-revealed' : ''}`}
             type="button"
-            onClick={(event) => {
-              setStitch626Secret(true);
-              event.currentTarget.blur();
-            }}
-            aria-label={stitch626Secret ? 'Akamalacuista' : 'Descubrir la palabra secreta de Stitch'}
+            onClick={revealStitch626}
+            aria-label={stitch626Secret ? 'Repetir Meega nala kweesta' : 'Descubrir la palabra secreta de Stitch'}
           >
-            <img src="/ellayyo/stitch/stitch-transparent.png" alt="Stitch" />
-            <span>{stitch626Secret ? 'Akamalacuista' : 'Dame click'}</span>
+            <img
+              src={stitch626Secret ? '/ellayyo/stitch/stitch-angry.png' : '/ellayyo/stitch/stitch-transparent.png'}
+              alt={stitch626Secret ? 'Stitch enfadado y rodeado de fuego' : 'Stitch enamorado'}
+            />
+            <span>{stitch626Secret ? 'Meega nala kweesta' : 'Dame click'}</span>
           </button>
           <div className="section-tag"><span>05</span> El comité intergaláctico del perdón</div>
           <div className="stitch-heading">
