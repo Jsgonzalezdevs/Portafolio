@@ -116,6 +116,7 @@
 .gate-stars { position: absolute; top: 6%; color: rgba(35,119,213,.45); font-size: 1.5rem; letter-spacing: 1.1em; }
 .gate-signature { position: absolute; bottom: 20px; margin: 0; color: rgba(25,48,75,.6); font-size: .72rem; letter-spacing: .04em; }
 .secret-toast, .egg-toast { position: fixed; z-index: 10002; left: 50%; bottom: 24px; width: min(430px, calc(100% - 32px)); transform: translateX(-50%); padding: 15px 20px; border-radius: 18px; color: white; background: #174f92; box-shadow: 0 14px 44px rgba(23,79,146,.3); font-size: .9rem; font-weight: 700; }
+.cheat-input { position: fixed; left: 50%; bottom: 1px; width: 1px; height: 1px; padding: 0; border: 0; opacity: .01; color: transparent; background: transparent; font-size: 16px; caret-color: transparent; pointer-events: none; }
 
 .gate-stitch-cutout {
   position: absolute;

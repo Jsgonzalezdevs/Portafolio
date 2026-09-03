@@ -228,16 +228,16 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
   );
 }
 
-function MusicControl({ playing, onToggle }: { playing: boolean; onToggle: () => void }) {
+function MusicControl({ playing, onToggle, title, artist }: { playing: boolean; onToggle: () => void; title: string; artist: string }) {
   return (
     <button className="music-control" type="button" onClick={onToggle} aria-label={playing ? 'Pausar canción' : 'Reproducir canción'}>
       <span className={playing ? 'music-pulse' : ''}>{playing ? <Volume2 size={19} /> : <VolumeX size={19} />}</span>
-      <span><strong>Prométeme</strong><small>Andrés Cepeda</small></span>
+      <span><strong>{title}</strong><small>{artist}</small></span>
     </button>
   );
 }
 
-function LoveLetter({ onSecret }: { onSecret: (message: string) => void }) {
+function LoveLetter({ onSecret, onPersonalSong }: { onSecret: (message: string) => void; onPersonalSong: () => void }) {
   const [open, setOpen] = useState(false);
   const signatureClicks = useRef(0);
 
@@ -253,7 +253,7 @@ function LoveLetter({ onSecret }: { onSecret: (message: string) => void }) {
           </button>
         )}
         <article className="letter-paper">
-          <p className="letter-date">2 de septiembre de 2026</p>
+          <p className="letter-date" onClick={onPersonalSong}>2 de septiembre de 2026</p>
           <h2>Ojitos</h2>
           <p>Hoy no necesitabas un regaño ni una lista de soluciones</p>
           <p>Necesitabas sentir que tu novio estaba de tu lado y que te escuchaba de verdad</p>
@@ -284,10 +284,13 @@ function LoveLetter({ onSecret }: { onSecret: (message: string) => void }) {
 
 export function EllaYYo() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const personalSongRef = useRef<HTMLAudioElement>(null);
   const stitchVoiceRef = useRef<HTMLAudioElement>(null);
+  const cheatInputRef = useRef<HTMLInputElement>(null);
   const resumeMusicAfterStitchRef = useRef(false);
   const [accepted, setAccepted] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
+  const [personalSong, setPersonalSong] = useState(false);
   const [finalMessage, setFinalMessage] = useState(false);
   const [, setEasterEggs] = useState(0);
   const [heroPrompt, setHeroPrompt] = useState(false);
@@ -330,6 +333,7 @@ export function EllaYYo() {
 
     let keyboardBuffer = '';
     const discoverTypedSecret = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement) return;
       if (event.key.length !== 1) return;
       keyboardBuffer = `${keyboardBuffer}${event.key.toLowerCase()}`.slice(-12);
       if (keyboardBuffer.endsWith('ohana')) {
@@ -360,7 +364,7 @@ export function EllaYYo() {
   };
 
   const toggleMusic = () => {
-    const audio = audioRef.current;
+    const audio = personalSong ? personalSongRef.current : audioRef.current;
     if (!audio) return;
     if (audio.paused) {
       void audio.play().then(() => setMusicOn(true)).catch(() => setMusicOn(false));
@@ -368,6 +372,17 @@ export function EllaYYo() {
       audio.pause();
       setMusicOn(false);
     }
+  };
+
+  const playPersonalSong = () => {
+    const song = personalSongRef.current;
+    if (!song) return;
+
+    audioRef.current?.pause();
+    song.currentTime = 0;
+    setPersonalSong(true);
+    revealSecret('Encontraste una canción que hice para ti: Eres Tú 💙');
+    void song.play().then(() => setMusicOn(true)).catch(() => setMusicOn(false));
   };
 
   const toggleMusicWithSecret = () => {
@@ -400,11 +415,31 @@ export function EllaYYo() {
     });
   };
 
+  const enterMobileCheat = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const code = input.value.toLowerCase().replace(/\s/g, '').slice(-12);
+    const secrets: Record<string, string> = {
+      ohana: 'Escribiste OHANA: tú siempre vas a ser parte de mi familia elegida 💙',
+      '1111': 'Deseo secreto desbloqueado: volver a encontrarnos siempre a las 11:11 ✨',
+      potito: 'Contraseña correcta: mi potito corazón siempre te reconoce 🤍',
+    };
+    const matchedCode = Object.keys(secrets).find((secret) => code.endsWith(secret));
+
+    if (matchedCode) {
+      revealSecret(secrets[matchedCode]);
+      input.value = '';
+      input.blur();
+      return;
+    }
+
+    revealSecret(`Modo trucos: ${code.toUpperCase()}_`);
+  };
+
   const revealStitch626 = (event: React.MouseEvent<HTMLButtonElement>) => {
     setStitch626Secret(true);
     event.currentTarget.blur();
 
-    const music = audioRef.current;
+    const music = personalSong ? personalSongRef.current : audioRef.current;
     const voice = stitchVoiceRef.current;
     if (!voice) return;
 
@@ -437,6 +472,14 @@ export function EllaYYo() {
         onPlay={() => setMusicOn(true)}
         onPause={() => setMusicOn(false)}
       />
+      <audio
+        ref={personalSongRef}
+        src="/ellayyo/eres-tu.mp4"
+        preload="metadata"
+        onPlay={() => setMusicOn(true)}
+        onPause={() => setMusicOn(false)}
+        onEnded={() => setMusicOn(false)}
+      />
       <audio ref={stitchVoiceRef} src="/ellayyo/stitch/meega-nala-kweesta.mp3" preload="auto" />
     </>
   );
@@ -445,7 +488,24 @@ export function EllaYYo() {
     <>
       {soundtrack}
       {!accepted ? <ForgivenessGate onYes={accept} /> : <div className="ellayyo">
-      <MusicControl playing={musicOn} onToggle={toggleMusicWithSecret} />
+      <input
+        ref={cheatInputRef}
+        className="cheat-input"
+        type="text"
+        inputMode="text"
+        enterKeyHint="done"
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        aria-label="Introducir código secreto"
+        onChange={enterMobileCheat}
+      />
+      <MusicControl
+        playing={musicOn}
+        onToggle={toggleMusicWithSecret}
+        title={personalSong ? 'Eres Tú' : 'Prométeme'}
+        artist={personalSong ? 'Julian Gonzalez' : 'Andrés Cepeda'}
+      />
       <div className="floating-hearts" aria-hidden="true"><span>♡</span><span>✦</span><span>♡</span><span>✿</span></div>
 
       <header className="love-hero">
@@ -475,7 +535,7 @@ export function EllaYYo() {
           </div>
         </section>
 
-        <LoveLetter onSecret={revealSecret} />
+        <LoveLetter onSecret={revealSecret} onPersonalSong={playPersonalSong} />
 
         <section className="promises-section">
           <div className="section-tag light" onDoubleClick={() => revealSecret('Secreto 03: quiero cumplirlo bonito y sin excusas')}><span>03</span> Menos palabras, más acciones</div>
@@ -567,6 +627,10 @@ export function EllaYYo() {
         <span onClick={() => {
           footerClicksRef.current += 1;
           if (footerClicksRef.current === 2) revealSecret('J + K: una historia con errores pero también con mucho amor');
+          if (footerClicksRef.current === 3) {
+            cheatInputRef.current?.focus();
+            revealSecret('Modo trucos activado: escribe uno de los códigos secretos 🎮');
+          }
         }}>J + K</span>
         <p>Hecho a mano, con amor, errores de ortografía y mucho potito corazón.<small>Stitch PNG: PNGimg · CC BY-NC 4.0</small></p>
         <a href={`https://www.youtube.com/watch?v=${YOUTUBE_ID}`} target="_blank" rel="noreferrer"><Music2 size={16} /> Escuchar Prométeme</a>
