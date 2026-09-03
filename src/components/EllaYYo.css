@@ -231,7 +231,6 @@
 .stitch-card-7 { grid-column: span 2; grid-row: span 3; }
 .stitch-card-1 img { object-position: 50% 22%; }
 .stitch-card-2 img { object-position: center 38%; }
-.stitch-credit { position: relative; z-index: 1; margin: 24px 0 0; color: #7890a4; font-size: .64rem; text-align: right; }
 
 .final-section { padding: 120px 20px; text-align: center; background: #ffdfe9; }
 .final-flower { margin-bottom: 24px; color: #ef6f9b; }
@@ -282,7 +281,6 @@
   .stitch-heading { grid-template-columns: 1fr; gap: 22px; }
   .stitch-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -18px; padding: 8px 18px 24px; }
   .stitch-card, .stitch-card-1, .stitch-card-2, .stitch-card-3, .stitch-card-4, .stitch-card-5, .stitch-card-6, .stitch-card-7 { flex: 0 0 76vw; height: 400px; scroll-snap-align: center; }
-  .stitch-credit { text-align: center; }
   .love-footer { flex-direction: column; padding-block: 36px 95px; }
 }
 

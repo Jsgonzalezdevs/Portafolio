@@ -329,7 +329,6 @@ export function EllaYYo() {
               </button>
             ))}
           </div>
-          <p className="stitch-credit">Imágenes promocionales de Lilo &amp; Stitch © Disney.</p>
         </section>
 
         <section className="final-section">
