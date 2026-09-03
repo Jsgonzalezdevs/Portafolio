@@ -37,25 +37,69 @@ const escapeLabels = [
   'Stitch votó que sí',
   'Te amo, piénsalo otra vez',
   'Nop, por aquí tampoco',
-  'Hasta que digas que sí 💙',
 ];
 
 function ForgivenessGate({ onYes }: { onYes: () => void }) {
   const arenaRef = useRef<HTMLDivElement>(null);
+  const yesRef = useRef<HTMLButtonElement>(null);
+  const noRef = useRef<HTMLButtonElement>(null);
+  const lastEscapeRef = useRef(0);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [escapes, setEscapes] = useState(0);
   const [needsTime, setNeedsTime] = useState(false);
   const [secret, setSecret] = useState(false);
 
   const moveNo = () => {
+    if (needsTime) return;
+
+    const now = performance.now();
+    if (now - lastEscapeRef.current < 180) return;
+    lastEscapeRef.current = now;
+
+    if (escapes >= escapeLabels.length - 1) {
+      setPosition({ x: 0, y: 0 });
+      setNeedsTime(true);
+      return;
+    }
+
     const arena = arenaRef.current;
-    const maxX = Math.min(145, Math.max(65, (arena?.clientWidth ?? 360) / 2 - 88));
-    const maxY = Math.min(72, Math.max(48, (arena?.clientHeight ?? 210) / 2 - 34));
-    const direction = escapes % 2 === 0 ? 1 : -1;
-    setPosition({
-      x: direction * (35 + Math.random() * maxX),
-      y: (Math.random() * 2 - 1) * maxY,
-    });
+    const yesButton = yesRef.current;
+    const noButton = noRef.current;
+
+    if (arena && yesButton && noButton) {
+      const arenaBox = arena.getBoundingClientRect();
+      const yesBox = yesButton.getBoundingClientRect();
+      const noBox = noButton.getBoundingClientRect();
+      const baseLeft = noBox.left - position.x;
+      const baseTop = noBox.top - position.y;
+      const minX = arenaBox.left + 8 - baseLeft;
+      const maxX = arenaBox.right - 8 - noBox.width - baseLeft;
+      const minY = arenaBox.top + 8 - baseTop;
+      const maxY = arenaBox.bottom - 8 - noBox.height - baseTop;
+      let nextPosition = position;
+
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        const x = minX + Math.random() * Math.max(0, maxX - minX);
+        const y = minY + Math.random() * Math.max(0, maxY - minY);
+        const candidate = {
+          left: baseLeft + x,
+          right: baseLeft + x + noBox.width,
+          top: baseTop + y,
+          bottom: baseTop + y + noBox.height,
+        };
+        const overlapsYes = candidate.left < yesBox.right + 10
+          && candidate.right > yesBox.left - 10
+          && candidate.top < yesBox.bottom + 10
+          && candidate.bottom > yesBox.top - 10;
+
+        if (!overlapsYes) {
+          nextPosition = { x, y };
+          break;
+        }
+      }
+
+      setPosition(nextPosition);
+    }
     setEscapes((value) => value + 1);
   };
 
@@ -71,12 +115,13 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
         <p>No porque una página borre lo que pasó, sino porque quiero empezar por reconocerlo de verdad.</p>
 
         <div className="button-arena" ref={arenaRef}>
-          <button className="yes-button" type="button" onClick={onYes}>
+          <button className="yes-button" type="button" onClick={onYes} ref={yesRef}>
             Sí, ven acá <Heart size={18} fill="currentColor" />
           </button>
           <button
             className="no-button"
             type="button"
+            ref={noRef}
             style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
             onPointerEnter={moveNo}
             onPointerDown={(event) => {
@@ -86,13 +131,9 @@ function ForgivenessGate({ onYes }: { onYes: () => void }) {
             onFocus={moveNo}
             aria-label="Todavía no"
           >
-            {escapeLabels[escapes % escapeLabels.length]}
+            {needsTime ? 'Si todavía no también lo entiendo' : escapeLabels[escapes]}
           </button>
         </div>
-
-        <button className="time-link" type="button" onClick={() => setNeedsTime(true)}>
-          Si todavía no, también lo entiendo
-        </button>
 
         {needsTime && (
           <div className="soft-message" role="status">
@@ -131,13 +172,22 @@ function LoveLetter() {
         )}
         <article className="letter-paper">
           <p className="letter-date">2 de septiembre de 2026</p>
-          <h2>Kamila, perdóname.</h2>
-          <p>Hoy no necesitabas un regaño ni una lista de soluciones. Necesitabas sentir que tu novio estaba de tu lado, que te escuchaba y que entendía por qué estabas cansada.</p>
-          <p>Me preocupé por ti, sí, pero eso no justifica cómo te hablé. Insistí cuando ya me habías explicado, te hice sentir juzgada y, cuando dijiste que no querías hablar, respondí desde la rabia. Decirte «váyase entonces» estuvo mal. No era la forma de cuidar a la persona que amo.</p>
-          <p>Tampoco quiero defenderme enumerando todo lo bueno que hago. Lo que sentiste importa, aunque mi intención haya sido otra. Y me duele saber que, cuando buscabas refugio en mí, soné como las voces que ya te lastiman en casa.</p>
-          <p>No hice esto para comprar tu perdón. Lo hice porque quería detenerme, pensar en ti y decirte con calma lo que en una pelea no supe decir: <strong>te escucho, reconozco mi error y quiero aprender a amarte de una manera que también se sienta como amor para ti.</strong></p>
-          <p>Te amo mucho, mi 11:11.</p>
-          <p className="letter-signature">— Tu gordito, Julián</p>
+          <h2>Ojitos</h2>
+          <p>Hoy no necesitabas un regaño ni una lista de soluciones</p>
+          <p>Necesitabas sentir que tu novio estaba de tu lado y que te escuchaba de verdad</p>
+          <p>Me preocupé por ti pero eso no justifica cómo te hablé</p>
+          <p>Insistí cuando ya me habías explicado y te hice sentir juzgada</p>
+          <p>Cuando dijiste que no querías hablar respondí desde la rabia y decirte "váyase entonces" estuvo mal</p>
+          <p>No era la forma de cuidar a la persona que amo</p>
+          <p>Tampoco quiero defenderme enumerando todo lo bueno que hago</p>
+          <p>Lo que sentiste importa aunque mi intención haya sido otra</p>
+          <p>Me duele saber que cuando buscabas refugio en mí soné como las voces que ya te lastiman en casa</p>
+          <p>No hice esto para comprar tu perdón</p>
+          <p>Lo hice porque quería detenerme y pensar en ti para decirte con calma lo que en una pelea no supe decir</p>
+          <p><strong>Te escucho y reconozco mi error</strong></p>
+          <p><strong>Quiero aprender a amarte de una manera que también se sienta como amor para ti</strong></p>
+          <p>Te amo mucho mi 11:11</p>
+          <p className="letter-signature">— Tu gordito Julián</p>
         </article>
       </div>
     </section>
@@ -150,6 +200,7 @@ export function EllaYYo() {
   const [musicOn, setMusicOn] = useState(false);
   const [finalMessage, setFinalMessage] = useState(false);
   const [easterEggs, setEasterEggs] = useState(0);
+  const [heroPrompt, setHeroPrompt] = useState(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -213,7 +264,9 @@ export function EllaYYo() {
           <span className="eyebrow">Para María Kamila, con todo mi corazón</span>
           <h1>Ella y yo.</h1>
           <p>Una historia imperfecta, bonita y muy nuestra.</p>
-          <a href="#carta">Hay algo que quiero decirte <ChevronDown size={20} /></a>
+          <a href="#carta" onClick={(event) => { event.preventDefault(); setHeroPrompt(true); }}>
+            {heroPrompt ? 'Desliza un poco más' : 'Hay algo que quiero decirte'} <ChevronDown size={20} />
+          </a>
         </div>
         <button className="eleven-eleven" type="button" onClick={() => setEasterEggs((value) => value + 1)} aria-label="Pedir un deseo a las 11:11">
           <span>11:11</span><small>pide un deseo</small>
