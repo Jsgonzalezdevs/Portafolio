@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Flower2, Heart, Music2, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import './EllaYYo.css';
 
@@ -77,7 +77,7 @@ function getAnniversaryCountdown(now: Date) {
   return { days, hours, minutes, seconds, targetYear, bogotaDay };
 }
 
-function AnniversaryCountdown() {
+function AnniversaryCountdown({ onSecret }: { onSecret: (message: string) => void }) {
   const [countdown, setCountdown] = useState(() => getAnniversaryCountdown(new Date()));
 
   useEffect(() => {
@@ -115,7 +115,7 @@ function AnniversaryCountdown() {
           </div>
         ))}
       </div>
-      <div className="anniversary-heart" aria-hidden="true">♡</div>
+      <div className="anniversary-heart" aria-hidden="true" onDoubleClick={() => onSecret('Nuestro primer beso sigue siendo uno de mis lugares favoritos 🤍')}>♡</div>
     </section>
   );
 }
@@ -237,12 +237,13 @@ function MusicControl({ playing, onToggle }: { playing: boolean; onToggle: () =>
   );
 }
 
-function LoveLetter() {
+function LoveLetter({ onSecret }: { onSecret: (message: string) => void }) {
   const [open, setOpen] = useState(false);
+  const signatureClicks = useRef(0);
 
   return (
     <section className="letter-section" id="carta">
-      <div className="section-tag"><span>02</span> Lo que sí tenía que decir</div>
+      <div className="section-tag" onDoubleClick={() => onSecret('Secreto 02: esta carta tenía mucho más que código')}><span>02</span> Lo que sí tenía que decir</div>
       <div className={`letter-envelope ${open ? 'is-open' : ''}`}>
         {!open && (
           <button type="button" onClick={() => setOpen(true)}>
@@ -268,7 +269,13 @@ function LoveLetter() {
           <p><strong>Te escucho y reconozco mi error</strong></p>
           <p><strong>Quiero aprender a amarte de una manera que también se sienta como amor para ti</strong></p>
           <p>Te amo mucho mi 11:11</p>
-          <p className="letter-signature">— Tu gordito Julián</p>
+          <p
+            className="letter-signature"
+            onClick={() => {
+              signatureClicks.current += 1;
+              if (signatureClicks.current === 3) onSecret('Firmado tres veces porque te escogería tres y mil veces más 💙');
+            }}
+          >— Tu gordito Julián</p>
         </article>
       </div>
     </section>
@@ -282,10 +289,22 @@ export function EllaYYo() {
   const [accepted, setAccepted] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
   const [finalMessage, setFinalMessage] = useState(false);
-  const [easterEggs, setEasterEggs] = useState(0);
+  const [, setEasterEggs] = useState(0);
   const [heroPrompt, setHeroPrompt] = useState(false);
   const [stitch626Secret, setStitch626Secret] = useState(false);
   const [activeStitchPhoto, setActiveStitchPhoto] = useState<number | null>(null);
+  const [secretMessage, setSecretMessage] = useState<string | null>(null);
+  const secretTimerRef = useRef<number | undefined>(undefined);
+  const seenPhotosRef = useRef(new Set<number>());
+  const seenStitchPhotosRef = useRef(new Set<number>());
+  const musicClicksRef = useRef(0);
+  const footerClicksRef = useRef(0);
+
+  const revealSecret = useCallback((message: string) => {
+    setSecretMessage(message);
+    if (secretTimerRef.current) window.clearTimeout(secretTimerRef.current);
+    secretTimerRef.current = window.setTimeout(() => setSecretMessage(null), 5200);
+  }, []);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -306,6 +325,33 @@ export function EllaYYo() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!accepted) return;
+
+    let keyboardBuffer = '';
+    const discoverTypedSecret = (event: KeyboardEvent) => {
+      if (event.key.length !== 1) return;
+      keyboardBuffer = `${keyboardBuffer}${event.key.toLowerCase()}`.slice(-12);
+      if (keyboardBuffer.endsWith('ohana')) {
+        revealSecret('Escribiste OHANA: tú siempre vas a ser parte de mi familia elegida 💙');
+        keyboardBuffer = '';
+      } else if (keyboardBuffer.endsWith('1111')) {
+        revealSecret('Deseo secreto desbloqueado: volver a encontrarnos siempre a las 11:11 ✨');
+        keyboardBuffer = '';
+      } else if (keyboardBuffer.endsWith('potito')) {
+        revealSecret('Contraseña correcta: mi potito corazón siempre te reconoce 🤍');
+        keyboardBuffer = '';
+      }
+    };
+
+    window.addEventListener('keydown', discoverTypedSecret);
+    return () => window.removeEventListener('keydown', discoverTypedSecret);
+  }, [accepted, revealSecret]);
+
+  useEffect(() => () => {
+    if (secretTimerRef.current) window.clearTimeout(secretTimerRef.current);
+  }, []);
+
   const accept = () => {
     void audioRef.current?.play().catch(() => setMusicOn(false));
     setAccepted(true);
@@ -322,6 +368,36 @@ export function EllaYYo() {
       audio.pause();
       setMusicOn(false);
     }
+  };
+
+  const toggleMusicWithSecret = () => {
+    musicClicksRef.current += 1;
+    if (musicClicksRef.current === 4) {
+      revealSecret('La canción se puede pausar pero lo que siento por ti no 💙');
+    }
+    toggleMusic();
+  };
+
+  const collectPhotoSecret = (index: number) => {
+    seenPhotosRef.current.add(index);
+    if (seenPhotosRef.current.size === photos.length) {
+      revealSecret('Miraste todos nuestros recuerdos y todavía nos faltan muchísimos por guardar 📸');
+    }
+  };
+
+  const collectStitchSecret = (index: number) => {
+    seenStitchPhotosRef.current.add(index);
+    if (seenStitchPhotosRef.current.size === stitchPhotos.length) {
+      revealSecret('Stitch confirma que completaste la misión intergaláctica 626 💙');
+    }
+  };
+
+  const makeWish = () => {
+    setEasterEggs((value) => {
+      const next = value + 1;
+      revealSecret(next === 1 ? 'Deseo guardado: que volvamos a ser paz 💫' : 'Encontraste otro secreto: te escogería en todas las galaxias 💙');
+      return next;
+    });
   };
 
   const revealStitch626 = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -369,7 +445,7 @@ export function EllaYYo() {
     <>
       {soundtrack}
       {!accepted ? <ForgivenessGate onYes={accept} /> : <div className="ellayyo">
-      <MusicControl playing={musicOn} onToggle={toggleMusic} />
+      <MusicControl playing={musicOn} onToggle={toggleMusicWithSecret} />
       <div className="floating-hearts" aria-hidden="true"><span>♡</span><span>✦</span><span>♡</span><span>✿</span></div>
 
       <header className="love-hero">
@@ -377,20 +453,20 @@ export function EllaYYo() {
         <div className="hero-shade" />
         <div className="hero-copy">
           <span className="eyebrow">Para María Kamila, con todo mi corazón</span>
-          <h1>Ella y yo.</h1>
+          <h1 onDoubleClick={() => revealSecret('Plot twist: yo sigo eligiendo a ella en todas las versiones de esta historia 💙')}>Ella y yo.</h1>
           <p>Una historia imperfecta, bonita y muy nuestra.</p>
           <a href="#carta" onClick={(event) => { event.preventDefault(); setHeroPrompt(true); }}>
             {heroPrompt ? 'Desliza un poco más' : 'Hay algo que quiero decirte'} <ChevronDown size={20} />
           </a>
         </div>
-        <button className="eleven-eleven" type="button" onClick={() => setEasterEggs((value) => value + 1)} aria-label="Pedir un deseo a las 11:11">
+        <button className="eleven-eleven" type="button" onClick={makeWish} aria-label="Pedir un deseo a las 11:11">
           <span>11:11</span><small>pide un deseo</small>
         </button>
       </header>
 
       <main>
         <section className="truth-section">
-          <div className="section-tag"><span>01</span> Primero, la verdad</div>
+          <div className="section-tag" onDoubleClick={() => revealSecret('Secreto 01: contigo prefiero la paz antes que tener la razón')}><span>01</span> Primero, la verdad</div>
           <p className="big-truth">No quiero tener la razón.<br /><em>Quiero entenderte mejor.</em></p>
           <div className="truth-grid">
             <p>Una buena intención pierde su valor cuando la forma hiere.</p>
@@ -399,10 +475,10 @@ export function EllaYYo() {
           </div>
         </section>
 
-        <LoveLetter />
+        <LoveLetter onSecret={revealSecret} />
 
         <section className="promises-section">
-          <div className="section-tag light"><span>03</span> Menos palabras, más acciones</div>
+          <div className="section-tag light" onDoubleClick={() => revealSecret('Secreto 03: quiero cumplirlo bonito y sin excusas')}><span>03</span> Menos palabras, más acciones</div>
           <h2>No te prometo ser perfecto.<br />Sí me comprometo a esto:</h2>
           <div className="promise-list">
             <article><span>01</span><div><h3>Escuchar antes de solucionar</h3><p>Preguntarte: «¿quieres que te escuche o pensamos juntos qué hacer?»</p></div></article>
@@ -412,14 +488,14 @@ export function EllaYYo() {
         </section>
 
         <section className="gallery-section">
-          <div className="section-tag"><span>04</span> Nosotros, en momentos bonitos</div>
+          <div className="section-tag" onDoubleClick={() => revealSecret('Secreto 04: todavía faltan muchos recuerdos por guardar')}><span>04</span> Nosotros, en momentos bonitos</div>
           <div className="gallery-heading">
             <h2>Un pedacito de<br />todo lo nuestro.</h2>
             <p>Toca cada foto. Algunas cosas bonitas merecen volver a mirarse sin prisa.</p>
           </div>
           <div className="photo-grid">
             {photos.map((photo, index) => (
-              <button className={`photo-card photo-${index + 1}`} type="button" key={photo.src}>
+              <button className={`photo-card photo-${index + 1}`} type="button" key={photo.src} onClick={() => collectPhotoSecret(index)}>
                 <img src={photo.src} alt={photo.alt} loading={index > 1 ? 'lazy' : 'eager'} />
                 <span>{photo.note}</span>
               </button>
@@ -427,7 +503,7 @@ export function EllaYYo() {
           </div>
         </section>
 
-        <AnniversaryCountdown />
+        <AnniversaryCountdown onSecret={revealSecret} />
 
         <section className="stitch-section">
           <button
@@ -442,7 +518,7 @@ export function EllaYYo() {
             />
             <span>{stitch626Secret ? 'Meega nala kweesta' : 'Dame click'}</span>
           </button>
-          <div className="section-tag"><span>06</span> El comité intergaláctico del perdón</div>
+          <div className="section-tag" onDoubleClick={() => revealSecret('Experimento secreto: J + K también significa ohana')}><span>06</span> El comité intergaláctico del perdón</div>
           <div className="stitch-heading">
             <div>
               <span className="eyebrow">Stitch también vino a insistir</span>
@@ -456,7 +532,10 @@ export function EllaYYo() {
                 type="button"
                 className={`stitch-card stitch-card-${index + 1} ${activeStitchPhoto === index ? 'is-caption-open' : ''}`}
                 key={photo.src}
-                onClick={() => setActiveStitchPhoto((current) => current === index ? null : index)}
+                onClick={() => {
+                  collectStitchSecret(index);
+                  setActiveStitchPhoto((current) => current === index ? null : index);
+                }}
                 aria-expanded={activeStitchPhoto === index}
                 aria-label={`${photo.alt}. ${activeStitchPhoto === index ? 'Ocultar mensaje' : 'Mostrar mensaje'}`}
               >
@@ -468,7 +547,7 @@ export function EllaYYo() {
         </section>
 
         <section className="final-section">
-          <Flower2 className="final-flower" size={46} />
+          <Flower2 className="final-flower" size={46} onDoubleClick={() => revealSecret('Hasta esta flor sabe que tú sigues siendo mi detalle favorito 🌸')} />
           <span className="eyebrow">Una promesa que empieza hoy</span>
           <h2>Quiero que mis acciones<br />te den la paz que mis palabras no supieron darte.</h2>
           {!finalMessage ? (
@@ -485,14 +564,17 @@ export function EllaYYo() {
       </main>
 
       <footer className="love-footer">
-        <span>J + K</span>
+        <span onClick={() => {
+          footerClicksRef.current += 1;
+          if (footerClicksRef.current === 3) revealSecret('J + K: una historia con errores pero también con mucho amor');
+        }}>J + K</span>
         <p>Hecho a mano, con amor, errores de ortografía y mucho potito corazón.<small>Stitch PNG: PNGimg · CC BY-NC 4.0</small></p>
         <a href={`https://www.youtube.com/watch?v=${YOUTUBE_ID}`} target="_blank" rel="noreferrer"><Music2 size={16} /> Escuchar Prométeme</a>
       </footer>
 
-      {easterEggs > 0 && (
-        <div className="egg-toast" role="status" onClick={() => setEasterEggs(0)}>
-          {easterEggs === 1 ? 'Deseo guardado: que volvamos a ser paz 💫' : 'Encontraste otro secreto: te escogería en todas las galaxias 💙'}
+      {secretMessage && (
+        <div className="egg-toast" role="status" onClick={() => setSecretMessage(null)}>
+          {secretMessage}
         </div>
       )}
       </div>}
