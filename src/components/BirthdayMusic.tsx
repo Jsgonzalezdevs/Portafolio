@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Music2, Pause, Play } from 'lucide-react';
 
 // Official Apple Music preview; replace with the supplied full audio when available.
-const BACKGROUND_SONG = 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ed/3b/73/ed3b73a4-fb24-e935-37c3-0fbc9b3c1d60/mzaf_11744097457782634357.plus.aac.p.m4a';
+const BACKGROUND_SONG = 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/40/9b/61/409b6144-fa23-08a9-b198-298aea5c1f55/mzaf_5625712100856939100.plus.aac.p.m4a';
+const FULL_SONG_START_SECONDS = 12;
 export function BirthdayMusic({ personalPlaying, onBackgroundPlay }: { personalPlaying: boolean; onBackgroundPlay: () => void }) {
   const audio = useRef<HTMLAudioElement>(null);
   const resumeAfterSong = useRef(false);
@@ -21,7 +22,7 @@ export function BirthdayMusic({ personalPlaying, onBackgroundPlay }: { personalP
     else song.pause();
   };
   return <>
-    <audio ref={audio} src={BACKGROUND_SONG} loop preload="none" onPlay={() => { setPlaying(true); onBackgroundPlay(); }} onPause={() => setPlaying(false)} onError={() => { setError(true); setPlaying(false); }} />
-    <button className="bday-floating-music" onClick={toggle} aria-label={playing ? 'Pausar Te encontré' : 'Reproducir Te encontré'} title="Te encontré · El Vega · adelanto oficial · volumen 15%"><Music2 size={18} /><span>Te encontré<small>{error ? 'Toca para reintentar' : playing ? 'El Vega · sonando bajito' : 'El Vega · tocar para escuchar'}</small></span>{playing ? <Pause size={15} /> : <Play size={15} />}</button>
+    <audio ref={audio} src={BACKGROUND_SONG} loop preload="none" onLoadedMetadata={() => { const song = audio.current; if (song && song.duration > 180) song.currentTime = FULL_SONG_START_SECONDS; }} onTimeUpdate={() => { const song = audio.current; if (song && song.duration > 180 && song.currentTime < FULL_SONG_START_SECONDS) song.currentTime = FULL_SONG_START_SECONDS; }} onPlay={() => { setPlaying(true); onBackgroundPlay(); }} onPause={() => setPlaying(false)} onError={() => { setError(true); setPlaying(false); }} />
+    <button className="bday-floating-music" onClick={toggle} aria-label={playing ? 'Pausar La boda' : 'Reproducir La boda'} title="La boda · Cosculluela · adelanto oficial · volumen 15%"><Music2 size={18} /><span>La boda<small>{error ? 'Toca para reintentar' : playing ? 'Cosculluela · sonando bajito' : 'Cosculluela · tocar para escuchar'}</small></span>{playing ? <Pause size={15} /> : <Play size={15} />}</button>
   </>;
 }
