@@ -29,6 +29,12 @@ const memories = [
   { src: '/cumpleanos/recuerdo-03.webp', caption: 'Esos días que se vuelven recuerdos favoritos.' },
   { src: '/cumpleanos/recuerdo-05.webp', caption: 'Los planes sencillitos también se quedan.' },
   { src: '/cumpleanos/recuerdo-09.webp', caption: 'Así, cerquita. Sin necesitar nada más.' },
+  { src: '/cumpleanos/recuerdo-16.webp', caption: 'Dos loquitos y un filtro. Muy nosotros.' },
+  { src: '/cumpleanos/recuerdo-17.webp', caption: 'Tus ocurrencias también me enamoran.' },
+  { src: '/cumpleanos/recuerdo-18.webp', caption: 'Otra celebración que guardo contigo.' },
+  { src: '/cumpleanos/recuerdo-19.webp', caption: 'Mi compañerita de tantos días bonitos.' },
+  { src: '/cumpleanos/recuerdo-20.webp', caption: 'Un espejo y una excusa para otra foto juntos.' },
+  { src: '/cumpleanos/recuerdo-21.webp', caption: 'Desde esos días ya me gustaba estar cerquita.' },
   { src: '/ellayyo/beso.webp', caption: 'Uno de esos besos que lo dicen todo.' },
   { src: '/ellayyo/sonrisas.webp', caption: 'Nuestra colección de sonrisas.' },
   { src: '/ellayyo/abrazo.webp', caption: 'Y que nunca nos falten estos abrazos.' },
@@ -44,7 +50,8 @@ export function Birthday() {
   const [photo, setPhoto] = useState<number | null>(null);
   const [stitch, setStitch] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
-  const video = useRef<HTMLVideoElement>(null);
+  const videos = useRef<(HTMLVideoElement | null)[]>([]);
+  const pauseVideos = (except?: HTMLVideoElement) => videos.current.forEach(video => { if (video && video !== except) video.pause(); });
   const backgroundAudio = useRef<BackgroundControl>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const countdown = birthdayCountdown(now);
@@ -65,7 +72,7 @@ export function Birthday() {
   const toggleMusic = () => {
     if (!audio.current) return;
     if (!audio.current.paused) audio.current.pause();
-    else { backgroundAudio.current?.pause(); video.current?.pause(); setMusicError(false); void audio.current.play().catch(() => setMusicError(true)); }
+    else { backgroundAudio.current?.pause(); pauseVideos(); setMusicError(false); void audio.current.play().catch(() => setMusicError(true)); }
   };
   return <div className="birthday">
     <div className="bday-grain" aria-hidden="true" />
@@ -80,7 +87,7 @@ export function Birthday() {
       {countdown.unlocked ? <button className="bday-primary" onClick={() => setEntered(true)}>Abrir mi sorpresa <Heart size={17} /></button> : <div className="bday-sealed">♡ Sellado con amor hasta el 23 de octubre · 12:00 a. m.<small>Hora de Colombia</small></div>}
       <span className="bday-handwritten">Para Kamila, de tu gordito.</span>
     </main> : <>
-      <audio ref={audio} src="/ellayyo/eres-tu.mp4" preload="metadata" onPlay={() => { backgroundAudio.current?.pause(); video.current?.pause(); setPlaying(true); }} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => setMusicError(true)} />
+      <audio ref={audio} src="/ellayyo/eres-tu.mp4" preload="metadata" onPlay={() => { backgroundAudio.current?.pause(); pauseVideos(); setPlaying(true); }} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => setMusicError(true)} />
       <main>
         <section className="bday-hero">
           <div className="bday-hero-copy"><span className="bday-eyebrow"><span className="bday-dot" /> HOY EL UNIVERSO CELEBRA CONTIGO</span><h1>Feliz cumpleaños,<br />mi <em>princesa.</em><span className="bday-title-star" aria-hidden="true">✧</span></h1><p>Hoy se celebra tu vida.<br />Y yo celebro la suerte de tenerte en la mía.</p><span className="bday-handwritten">Con todo mi potito corazón, Julián ♡</span></div>
@@ -91,9 +98,13 @@ export function Birthday() {
           <article className="bday-letter-card"><span className="bday-card-number">UNAS PALABRITAS PARA TI</span><div className={`bday-envelope ${letter ? 'opened' : ''}`} aria-hidden="true"><Heart fill="currentColor" /></div><h3>De mi corazón al tuyo</h3><p>Hay cosas que se sienten más bonitas cuando se escriben pensando en ti.</p><button onClick={() => setLetter(!letter)} aria-expanded={letter}>{letter ? 'Guardar mi cartita' : 'Abrir mi cartita'} <ArrowUpRight size={17} /></button>{letter && <div className="bday-letter"><p>Mi Kamila, mi princesa:</p><p>Feliz cumpleaños, mi vida. Hoy quiero recordarte lo especial que eres para mí. Tu sonrisa, tus ocurrencias, tu forma de hacer que un momento cualquiera se convierta en un recuerdo bonito.</p><p>Deseo que este nuevo año de tu vida te traiga tranquilidad, sueños cumplidos y muchas razones para sonreír. Que te sientas querida, acompañada y orgullosa de la persona que eres.</p><p>Me encanta poder mirarte y pensar que entre tantas personas tuve la suerte de encontrarte a ti. A mi niña de los ojitos bonitos, la de las ocurrencias que me hacen reír y los abrazos en los que quisiera quedarme un potito más.</p><p>Quiero seguir celebrando tus alegrías contigo. Escucharte cuando tengas mil cosas que contarme y acompañarte también cuando el día no haya salido como esperabas. Que sepas que puedes venir a mí, ser tú y sentirte amada sin tener que hacer nada más.</p><p>Ojalá hoy puedas verte un momentico como yo te veo. Tan bonita, tan especial y con tantas cosas por vivir. No dejes de creer en ti, mi vida. Yo quiero verte cumplir eso que tanto sueñas y estar cerquita para decirte que sabía que podías.</p><p>Me hace feliz compartir esta vida contigo y seguir guardando momentos de los dos. Hoy todos los detallitos de este rinconcito son para ti.</p><p>Esta paginita es un detallito, pero cada foto, cada palabra y cada cosita la hice pensando en sacarte una sonrisa. Porque te mereces sentirte consentida hoy y también en los días que no tienen una fecha especial.</p><p>Gachas por los besitos, por las risas y por todos esos momentos que ya son nuestros. Nos faltan muchas fotos por tomar, muchos planes por inventarnos y muchos cumpleaños en los que quiero decirte lo feliz que me hace tenerte.</p><p>Te amo mucho, mi 11:11. Que nunca te falten motivos para pedir un deseo.</p><span className="bday-handwritten">Tu gordito, Julián ♡</span></div>}</article>
           <article className="bday-song-card"><span className="bday-card-number">NUESTRA BANDA SONORA</span><div className={`bday-record ${playing ? 'spinning' : ''}`} aria-hidden="true"><div><Heart size={23} fill="currentColor" /></div></div><h3>Eres tú</h3><p>La canción que te dediqué.<br />Porque entre tantas personas… eres tú.</p><button onClick={toggleMusic}>{playing ? <Pause size={17} /> : <Play size={17} />} {playing ? 'Pausar nuestra canción' : 'Escuchar nuestra canción'}</button>{musicError && <p role="status">No pudimos reproducirla. <a href="/ellayyo/eres-tu.mp4">Abrir la canción</a></p>}</article>
         </div></section>
-        <BirthdayMusic audioRef={backgroundAudio} personalPlaying={playing} onBackgroundPlay={() => { audio.current?.pause(); video.current?.pause(); }} />
+        <BirthdayMusic audioRef={backgroundAudio} personalPlaying={playing} onBackgroundPlay={() => { audio.current?.pause(); pauseVideos(); }} />
         <section className="bday-section bday-memories"><div className="bday-section-heading"><span className="bday-eyebrow">02 / NUESTRO PEQUEÑO ÁLBUM</span><h2>Momentitos nuestros.<br /><em>De mis favoritos.</em></h2><p>Toca una foto y quédate un ratito en ese recuerdo.</p></div><div className="bday-photo-grid">{memories.map((memory, i) => <button className="bday-polaroid" key={memory.src} onClick={() => setPhoto(i)}><span className="bday-tape" aria-hidden="true" /><img src={memory.src} alt={memory.caption} loading="lazy" /><span>{memory.caption}</span><small>J + K · recuerdo {String(i + 1).padStart(2, '0')}</small></button>)}</div></section>
-        <section className="bday-video-memory" aria-labelledby="video-memory-title"><div><span className="bday-eyebrow">UN RECUERDITO EN MOVIMIENTO</span><h2 id="video-memory-title">Hay momentos que<br /><em>merecen volver a vivirse.</em></h2><p>Una foto guarda la sonrisa. Un video nos deja quedarnos un ratito más.</p></div><div className="bday-video-frame"><video ref={video} controls playsInline preload="none" poster="/cumpleanos/video-portada.webp" onPlay={() => { audio.current?.pause(); backgroundAudio.current?.pause(); }}><source src="/cumpleanos/nuestro-recuerdo.mp4" type="video/mp4" />Tu navegador no puede reproducir este video.</video><span className="bday-handwritten">Un pedacito de nosotros ♡</span></div></section>
+        <section className="bday-video-memory" aria-labelledby="video-memory-title"><div><span className="bday-eyebrow">RECUERDITOS EN MOVIMIENTO</span><h2 id="video-memory-title">Hay momentos que<br /><em>merecen volver a vivirse.</em></h2><p>Una foto guarda la sonrisa. Un video nos deja quedarnos un ratito más.</p></div><div className="bday-video-grid">{[
+          { src: '/cumpleanos/nuestro-recuerdo.mp4', poster: '/cumpleanos/video-portada.webp', caption: 'Un pedacito de nosotros ♡' },
+          { src: '/cumpleanos/nuestro-recuerdo-2.mp4', poster: '/cumpleanos/video-portada-2.webp', caption: 'Esa sorpresa que quiero guardar siempre.' },
+          { src: '/cumpleanos/nuestro-recuerdo-3.mp4', poster: '/cumpleanos/video-portada-3.webp', caption: 'Un momentito más a tu lado.' },
+        ].map((clip, index) => <div className="bday-video-frame" key={clip.src}><video ref={element => { videos.current[index] = element; }} aria-label={clip.caption} controls playsInline preload="none" poster={clip.poster} onPlay={event => { pauseVideos(event.currentTarget); audio.current?.pause(); backgroundAudio.current?.pause(); }}><source src={clip.src} type="video/mp4" />Tu navegador no puede reproducir este video.</video><span className="bday-handwritten">{clip.caption}</span></div>)}</div></section>
         <section className="bday-section bday-wish"><span className="bday-eyebrow">03 / CIERRA LOS OJITOS</span><h2>Un deseo, mi princesa.<br /><em>El universo te escucha.</em></h2><div className={`bday-cake ${wish ? 'blown' : ''}`} aria-hidden="true"><div className="bday-candles">{[0,1,2].map(i => <span key={i}><i /></span>)}</div><div className="bday-cake-top" /><div className="bday-cake-base">♡ &nbsp; ♡ &nbsp; ♡</div><div className="bday-cake-plate" /></div><button className="bday-primary" onClick={() => setWish(!wish)}>{wish ? 'Encender las velitas otra vez' : 'Ya pedí mi deseo · soplar las velitas'} <Sparkles size={17} /></button><p role="status">{wish ? 'Que eso que acabas de pedir encuentre el camino hasta ti. ♡' : 'Pídelo bajito. No tienes que contárselo a nadie.'}</p>{wish && <div className="bday-confetti" aria-hidden="true">{Array.from({length: 24}, (_, i) => <span key={i} style={{left: `${i * 4.3}%`, animationDelay: `${i % 5 * .13}s`, background: ['#b79ae0','#ed9fbb','#eac783'][i % 3]}} />)}</div>}</section>
         <section className="bday-stitch-album" aria-labelledby="stitch-album-title">
           <div className="bday-section-heading"><span className="bday-eyebrow">INVITADOS DE OTRA GALAXIA</span><h2 id="stitch-album-title">Stitch se puso bonito<br /><em>para celebrar contigo.</em></h2><p>Flores, una serenata y mucho amor para la cumpleañera.</p></div>
