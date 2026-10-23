@@ -3,6 +3,10 @@ import { ArrowDown, ArrowUpRight, Heart, Pause, Play, Sparkles, X } from 'lucide
 import './Birthday.css';
 import { BirthdayMusic, type BackgroundControl } from './BirthdayMusic';
 import stitchCelebracion from '../assets/stitch-celebracion.png';
+import stitchFlores from '../assets/stitch-flores.webp';
+import stitchSerenata from '../assets/stitch-serenata.webp';
+import stitchSonrisa from '../assets/stitch-sonrisa.webp';
+import stitchFiesta from '../assets/stitch-fiesta.webp';
 
 export const BIRTHDAY_AT = new Date('2026-10-23T00:00:00-05:00').getTime();
 export function birthdayCountdown(now: number) {
@@ -58,7 +62,7 @@ export function Birthday() {
   };
   return <div className="birthday">
     <div className="bday-grain" aria-hidden="true" />
-    <nav className="bday-nav"><a href={preview ? "/cumpleanos-mi-princesa?preview=1" : "/cumpleanos-mi-princesa"} aria-label="Inicio de la sorpresa">j <Heart size={13} fill="currentColor" /> k<span>UN RINCONCITO PARA TI</span></a><span>23 OCTUBRE · 2026 <Sparkles size={14} /></span></nav>
+    <nav className="bday-nav"><a href={preview ? "/cumpleanos-mi-princesa?preview=1" : "/cumpleanos-mi-princesa"} aria-label="Inicio de la sorpresa">J <Heart size={13} fill="currentColor" /> K<span>UN RINCONCITO PARA TI</span></a><span>23 OCTUBRE · 2026 <Sparkles size={14} /></span></nav>
     {(!countdown.unlocked && !preview) || !entered ? <main className="bday-gate">
       <div className="bday-orbit" aria-hidden="true">✧</div>
       <span className="bday-eyebrow">UNA FECHA FAVORITA EN EL UNIVERSO</span>
@@ -83,6 +87,15 @@ export function Birthday() {
         <BirthdayMusic audioRef={backgroundAudio} personalPlaying={playing} onBackgroundPlay={() => audio.current?.pause()} />
         <section className="bday-section bday-memories"><div className="bday-section-heading"><span className="bday-eyebrow">02 / NUESTRO PEQUEÑO ÁLBUM</span><h2>Momentitos nuestros.<br /><em>De mis favoritos.</em></h2><p>Toca una foto y quédate un ratito en ese recuerdo.</p></div><div className="bday-photo-grid">{memories.map((memory, i) => <button className="bday-polaroid" key={memory.src} onClick={() => setPhoto(i)}><span className="bday-tape" aria-hidden="true" /><img src={memory.src} alt={memory.caption} loading="lazy" /><span>{memory.caption}</span><small>J + K · recuerdo {String(i + 1).padStart(2, '0')}</small></button>)}</div></section>
         <section className="bday-section bday-wish"><span className="bday-eyebrow">03 / CIERRA LOS OJITOS</span><h2>Un deseo, mi princesa.<br /><em>El universo te escucha.</em></h2><div className={`bday-cake ${wish ? 'blown' : ''}`} aria-hidden="true"><div className="bday-candles">{[0,1,2].map(i => <span key={i}><i /></span>)}</div><div className="bday-cake-top" /><div className="bday-cake-base">♡ &nbsp; ♡ &nbsp; ♡</div><div className="bday-cake-plate" /></div><button className="bday-primary" onClick={() => setWish(!wish)}>{wish ? 'Encender las velitas otra vez' : 'Ya pedí mi deseo · soplar las velitas'} <Sparkles size={17} /></button><p role="status">{wish ? 'Que eso que acabas de pedir encuentre el camino hasta ti. ♡' : 'Pídelo bajito. No tienes que contárselo a nadie.'}</p>{wish && <div className="bday-confetti" aria-hidden="true">{Array.from({length: 24}, (_, i) => <span key={i} style={{left: `${i * 4.3}%`, animationDelay: `${i % 5 * .13}s`, background: ['#b79ae0','#ed9fbb','#eac783'][i % 3]}} />)}</div>}</section>
+        <section className="bday-stitch-album" aria-labelledby="stitch-album-title">
+          <div className="bday-section-heading"><span className="bday-eyebrow">INVITADOS DE OTRA GALAXIA</span><h2 id="stitch-album-title">Stitch se puso bonito<br /><em>para celebrar contigo.</em></h2><p>Flores, una serenata y mucho amor para la cumpleañera.</p></div>
+          <div className="bday-stitch-photos">{[
+            { src: stitchFlores, alt: 'Stitch con un collar de flores', note: 'Flores para mi princesa ♡' },
+            { src: stitchSerenata, alt: 'Stitch vestido de Elvis tocando guitarra', note: 'Una serenata solo para ti.' },
+            { src: stitchSonrisa, alt: 'Stitch sonriendo en la playa', note: 'Así de feliz por tu cumpleaños.' },
+            { src: stitchFiesta, alt: 'Stitch descansando con gafas de sol', note: 'Hoy la consentida eres tú.' },
+          ].map(item => <figure key={item.src}><span className="bday-tape" aria-hidden="true" /><img src={item.src} alt={item.alt} loading="lazy" width="400" height="400" /><figcaption>{item.note}</figcaption></figure>)}</div>
+        </section>
         <section className="bday-ohana"><button onClick={() => setStitch(!stitch)} aria-label="Descubrir el mensaje de Stitch" aria-expanded={stitch}><img src={stitchCelebracion} width="508" height="544" alt="Stitch te tiene un mensajito" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = '/ellayyo/stitch/stitch-family.webp'; }} /></button><div><span className="bday-eyebrow">UN INVITADO MUY ESPECIAL</span><h2>Ohana, mi niña.</h2><p>{stitch ? 'Misión 626: recordarte que eres la cumpleañera más bonita de toda la galaxia. ¡Te amamos! ♡' : 'Stitch también quería estar aquí. Tócalo, tiene algo que decirte.'}</p></div><span className="bday-ohana-star" aria-hidden="true">✧</span></section>
       </main><footer className="bday-footer"><Heart size={22} /><h2>Qué suerte que naciste.<br /><em>Qué suerte coincidir contigo.</em></h2><p>Feliz cumpleaños, María Kamila.</p><span className="bday-handwritten">Siempre tuyo, Julián.</span><small>23 de octubre de 2026 · Hecho con muchísimo amor.<br />Stitch: PNGimg · CC BY-NC 4.0</small></footer>
 
