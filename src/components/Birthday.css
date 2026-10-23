@@ -4,3 +4,4 @@
 @media(prefers-reduced-motion:reduce){.birthday *{animation:none!important;transition:none!important;scroll-behavior:auto!important}.bday-confetti{display:none}}
 
 .bday-ohana button img{display:block;width:100%;height:auto;min-height:100px;object-fit:contain}
+.bday-background-source{position:fixed;left:-1000px;top:0;width:200px;height:200px;overflow:hidden;pointer-events:none}.bday-background-source iframe{width:200px;height:200px;border:0}.bday-floating-music:disabled{opacity:.7}

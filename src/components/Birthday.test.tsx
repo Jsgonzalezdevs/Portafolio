@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 import { Birthday, BIRTHDAY_AT, birthdayCountdown } from './Birthday';
 
-afterEach(() => { cleanup(); vi.useRealTimers(); window.history.replaceState({}, '', '/'); });
+beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+});
+
+afterEach(() => { cleanup(); vi.useRealTimers(); window.history.replaceState({}, '', '/'); vi.restoreAllMocks(); });
 describe('birthday surprise', () => {
   it('allows an explicit preview before midnight without changing the normal countdown', () => {
     vi.useFakeTimers(); vi.setSystemTime(BIRTHDAY_AT - 3600000);
@@ -22,6 +27,8 @@ describe('birthday surprise', () => {
     vi.useFakeTimers(); vi.setSystemTime(BIRTHDAY_AT - 1000);
     render(<Birthday />);
     expect(screen.queryByText('Abrir mi sorpresa')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('audio')).toHaveLength(0);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(screen.queryByText('Abrir mi cartita')).not.toBeInTheDocument();
     act(() => { vi.advanceTimersByTime(1000); });
     fireEvent.click(screen.getByText('Abrir mi sorpresa'));
