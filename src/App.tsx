@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { LanguageProvider } from './context/LanguageContext';
 import { registrarVisita } from './lib/visita';
 import { activarProteccionCodigo } from './lib/proteccionCodigo';
@@ -10,6 +10,7 @@ import { Experience } from './components/Experience';
 import { Projects } from './components/Projects';
 import { Footer } from './components/Footer';
 import { EllaYYo } from './components/EllaYYo';
+const Birthday = lazy(() => import('./components/Birthday').then(module => ({ default: module.Birthday })));
 
 const Portfolio: React.FC = () => {
   // Una sola vez por carga. El portafolio es una página con secciones ancladas,
@@ -45,6 +46,7 @@ const Portfolio: React.FC = () => {
 
 const App: React.FC = () => {
   const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+  if (['/cumpleanos-mi-princesa', '/cumpleaños-mi-princesa'].includes(decodeURI(path))) return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#fcf8f4' }} />}><Birthday /></Suspense>;
   return path === '/ellayyo' ? <EllaYYo /> : <Portfolio />;
 };
 
