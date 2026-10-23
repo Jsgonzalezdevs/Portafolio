@@ -14,7 +14,7 @@ describe('birthday surprise', () => {
     window.history.replaceState({}, '', '/cumpleanos-mi-princesa?preview=1');
     render(<Birthday />);
     expect(screen.getByText('Abrir mi cartita')).toBeInTheDocument();
-    expect(screen.getAllByRole('button').filter(button => button.classList.contains('bday-polaroid'))).toHaveLength(12);
+    expect(screen.getAllByRole('button').filter(button => button.classList.contains('bday-polaroid'))).toHaveLength(18);
     expect(birthdayCountdown(Date.now()).unlocked).toBe(false);
   });
   it('unlocks exactly at midnight in Colombia and stays unlocked', () => {
