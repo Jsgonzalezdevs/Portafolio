@@ -73,6 +73,15 @@ test('si el primer modelo falla o se queda sin cupo, usa el siguiente; 401 = lla
   const sinCupo = crearClienteGroq('gsk_prueba', ['uno'], pedir);
   await assert.rejects(sinCupo({ model: 'x', max_tokens: 1, messages: [] }), (e: unknown) => e instanceof ErrorDeAsistente && e.estado === 429);
 
+  // Cupo agotado en el principal y respaldo inexistente: se informa del cupo (con la espera), no del 404.
+  const registro: string[] = [];
+  const mixto = crearClienteGroq('k', ['a', 'b'], (async (_u: unknown, init?: RequestInit) =>
+    JSON.parse(String(init?.body)).model === 'a'
+      ? new Response('{"error":{"message":"rate limit"}}', { status: 429, headers: { 'retry-after': '42.5' } })
+      : json(404, { error: { message: 'no existe' } })) as typeof fetch, (l) => registro.push(l));
+  await assert.rejects(mixto({ model: 'x', max_tokens: 1, messages: [] }), /Prueba en 43 segundos/);
+  assert.deepEqual(registro, ['groq a → 429 rate limit', 'groq b → 404 no existe']);
+
   const mala = crearClienteGroq('k', ['uno', 'dos'], (async () => json(401, {})) as typeof fetch);
   await assert.rejects(mala({ model: 'x', max_tokens: 1, messages: [] }), /llave de Groq no es válida/);
 });

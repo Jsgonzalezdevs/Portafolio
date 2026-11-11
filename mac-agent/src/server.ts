@@ -259,7 +259,7 @@ if (import.meta.main) {
   const modelosGroq = config.asistente.modelosGroq.length ? config.asistente.modelosGroq : MODELOS_GROQ;
   const crearMensaje = usarGroq
     ? claveGroq
-      ? crearClienteGroq(claveGroq, modelosGroq)
+      ? crearClienteGroq(claveGroq, modelosGroq, fetch, log)
       : async () => {
           throw new ErrorDeAsistente('Falta la llave de Groq: ejecuta  zsh mac-agent/scripts/llave.sh', 503);
         }

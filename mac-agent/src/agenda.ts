@@ -70,12 +70,47 @@ export function crearAgenda(app: string, run: Ejecutor): Agenda {
     permisos: () => llamar(['permisos']),
     // Muestra el diálogo de permisos en la Mac y espera a que respondas.
     pedirPermisos: () => llamar(['pedir-permisos'], 180_000),
-    eventos: (desde, hasta) => llamar(['eventos', desde, hasta]),
+    eventos: async (desde, hasta) => sinDuplicados(await llamar<Evento[]>(['eventos', desde, hasta])),
     crearEvento: (titulo, inicio, fin) => llamar(['crear-evento', titulo, inicio, fin]),
     recordatorios: () => llamar(['recordatorios']),
     crearRecordatorio: (titulo, vence) => llamar(['crear-recordatorio', titulo, ...(vence ? [vence] : [])]),
     completarRecordatorio: (id) => llamar(['completar-recordatorio', id]),
   };
+}
+
+const normalizar = (t: string) =>
+  t
+    .normalize('NFD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+/**
+ * El mismo evento suele estar en dos calendarios (p. ej. iCloud y Google), a
+ * veces con un emoji o prefijo distinto. Se considera duplicado si empieza y
+ * termina a la misma hora y un título contiene al otro; se conserva el más largo.
+ */
+export function sinDuplicados(eventos: Evento[]): Evento[] {
+  const salida: Evento[] = [];
+  for (const e of eventos) {
+    const titulo = normalizar(e.titulo);
+    const i = salida.findIndex((o) => {
+      if (o.inicio !== e.inicio || o.fin !== e.fin) return false;
+      const otro = normalizar(o.titulo);
+      return otro.includes(titulo) || titulo.includes(otro);
+    });
+    if (i === -1) salida.push(e);
+    else if (e.titulo.length > salida[i].titulo.length) salida[i] = e;
+  }
+  return salida;
+}
+
+/** Agenda en texto compacto para el modelo: menos tokens que el JSON completo. */
+export function resumirEventos(eventos: Evento[]): string {
+  if (!eventos.length) return 'Sin eventos en ese rango.';
+  const hora = (iso: string) => iso.slice(11, 16);
+  return eventos
+    .map((e) => `${e.inicio.slice(0, 10)} ${e.todoElDia ? 'todo el día' : `${hora(e.inicio)}-${hora(e.fin)}`} ${e.titulo}`)
+    .join('\n');
 }
 
 /** La agenda solo existe si el instalador pudo compilar la mini app. */

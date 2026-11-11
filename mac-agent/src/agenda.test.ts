@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { Avisador, crearAgenda, fechaLocal, type Agenda, type Recordatorio } from './agenda.ts';
+import { Avisador, crearAgenda, fechaLocal, resumirEventos, sinDuplicados, type Agenda, type Evento, type Recordatorio } from './agenda.ts';
 import type { Ejecutor } from './ejecutor.ts';
 
 /** Simula `open … --stdout <archivo> … --args <orden…>`: escribe la respuesta en el archivo. */
@@ -77,4 +77,23 @@ test('avisador: sin permiso no consulta recordatorios', async () => {
   } as unknown as Agenda;
   assert.equal(await new Avisador(agenda).revisar(), false);
   assert.equal(consultas, 0);
+});
+
+test('quita eventos duplicados entre calendarios y resume en texto compacto', () => {
+  const ev = (titulo: string, inicio: string, fin: string, todoElDia = false): Evento => ({
+    titulo, inicio, fin, todoElDia, calendario: 'x', lugar: null,
+  });
+  const limpio = sinDuplicados([
+    ev('🌱 Rutina AM & Traslado', '2026-11-12T05:45:00-05:00', '2026-11-12T07:00:00-05:00'),
+    ev('☕ 🌱 Rutina AM & Traslado', '2026-11-12T05:45:00-05:00', '2026-11-12T07:00:00-05:00'),
+    ev('Dentista', '2026-11-12T08:00:00-05:00', '2026-11-12T09:00:00-05:00'),
+    ev('Llamada', '2026-11-12T08:00:00-05:00', '2026-11-12T09:00:00-05:00'),
+    ev('Festivo', '2026-11-12T00:00:00-05:00', '2026-11-12T23:59:59-05:00', true),
+  ]);
+  assert.deepEqual(limpio.map((e) => e.titulo), ['☕ 🌱 Rutina AM & Traslado', 'Dentista', 'Llamada', 'Festivo']);
+  assert.equal(
+    resumirEventos(limpio.slice(1)),
+    '2026-11-12 08:00-09:00 Dentista\n2026-11-12 08:00-09:00 Llamada\n2026-11-12 todo el día Festivo',
+  );
+  assert.equal(resumirEventos([]), 'Sin eventos en ese rango.');
 });

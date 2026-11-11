@@ -11,7 +11,12 @@ import { ErrorDeAsistente, type CrearMensaje } from './asistente.ts';
  * escenas delicadas) vive en el agente, no en el modelo.
  */
 
-export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'];
+/**
+ * En orden de preferencia. Cada modelo tiene su propio cupo gratuito por
+ * minuto, así que el siguiente sirve de respaldo cuando uno se agota.
+ * (Comprobados contra /v1/models de una cuenta gratuita, nov. 2026.)
+ */
+export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
 const URL_GROQ = 'https://api.groq.com/openai/v1/chat/completions';
 
 type Params = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
@@ -113,14 +118,20 @@ type Fetch = typeof fetch;
  * orden: si uno no existe, llega a su límite gratuito o genera una llamada de
  * herramienta inválida, pasa al siguiente.
  */
-export function crearClienteGroq(apiKey: string, modelos = MODELOS_GROQ, pedir: Fetch = fetch): CrearMensaje {
+export function crearClienteGroq(
+  apiKey: string,
+  modelos = MODELOS_GROQ,
+  pedir: Fetch = fetch,
+  log: (linea: string) => void = () => {},
+): CrearMensaje {
   return async (params) => {
     const cuerpo = {
       messages: aMensajesGroq(params),
       tools: aHerramientasGroq(params.tools),
       tool_choice: 'auto',
       temperature: 0.3,
-      max_completion_tokens: 2048,
+      // El cupo gratuito es por tokens/minuto: respuestas de voz no necesitan más.
+      max_completion_tokens: 1024,
     };
     let ultimo: ErrorDeAsistente | null = null;
     for (const modelo of modelos) {
@@ -129,7 +140,12 @@ export function crearClienteGroq(apiKey: string, modelos = MODELOS_GROQ, pedir: 
         r = await pedir(URL_GROQ, {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...cuerpo, model: modelo }),
+          // Los gpt-oss razonan antes de responder: en «low» gastan menos cupo y tardan menos.
+          body: JSON.stringify({
+            ...cuerpo,
+            model: modelo,
+            ...(modelo.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
+          }),
           signal: AbortSignal.timeout(45_000),
         });
       } catch {
@@ -138,10 +154,14 @@ export function crearClienteGroq(apiKey: string, modelos = MODELOS_GROQ, pedir: 
       const datos = (await r.json().catch(() => ({}))) as RespuestaGroq;
       if (r.ok) return aMensajeClaude(datos);
       if (r.status === 401 || r.status === 403) throw new ErrorDeAsistente('La llave de Groq no es válida.', 503);
-      ultimo =
-        r.status === 429
-          ? new ErrorDeAsistente('Se acabó el cupo gratuito de Groq por ahora. Prueba en un rato.', 429)
-          : new ErrorDeAsistente(`Groq respondió ${r.status}: ${datos.error?.message ?? 'error'}`, 502);
+      log(`groq ${modelo} → ${r.status} ${datos.error?.message ?? ''}`.trim());
+      if (r.status === 429) {
+        const seg = Math.ceil(Number(r.headers.get('retry-after')) || 60);
+        // El aviso de cupo manda sobre errores de modelos de respaldo que no existan.
+        ultimo = new ErrorDeAsistente(`Se acabó el cupo gratuito de Groq por ahora. Prueba en ${seg} segundos.`, 429);
+      } else if (ultimo?.estado !== 429) {
+        ultimo = new ErrorDeAsistente(`Groq respondió ${r.status}: ${datos.error?.message ?? 'error'}`, 502);
+      }
       // 400 (llamada inválida o modelo retirado), 404, 413, 429 y 5xx: se intenta con el siguiente modelo.
     }
     throw ultimo ?? new ErrorDeAsistente('No hay modelos de Groq configurados.', 500);

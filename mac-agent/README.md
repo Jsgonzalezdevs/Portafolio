@@ -74,8 +74,9 @@ la comprueba, la guarda con permisos 600 junto al agente, vacía el portapapeles
 y reinicia el agente. La llave nunca se escribe en la terminal.
 
 - **Groq** (gratis): crea la llave en <https://console.groq.com/keys>. El
-  agente usa `openai/gpt-oss-120b` y, si falla o se acaba el cupo gratuito,
-  pasa solo a `llama-3.3-70b-versatile`. Se cambian con
+  agente usa `openai/gpt-oss-120b` y, si falla o se acaba su cupo gratuito,
+  pasa solo a `qwen/qwen3.8-27b` y luego a `openai/gpt-oss-20b`. El cupo
+  gratuito es por minuto (unos 8.000 tokens en el principal). Se cambian con
   `asistente.modelosGroq` en `config.json`.
 - **Claude**: llave de <https://console.anthropic.com>. Usa `asistente.modelo`.
 

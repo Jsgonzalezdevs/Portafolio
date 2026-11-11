@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import type { crearAcciones } from './acciones.ts';
-import type { Agenda } from './agenda.ts';
+import { resumirEventos, type Agenda } from './agenda.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
 
@@ -173,7 +173,9 @@ Cómo respondes:
 - Nunca digas que hiciste algo si la herramienta falló o no la usaste; di qué pasó.
 - Si algo no está a tu alcance (no hay herramienta para eso), dilo en una frase y, si sirve, sugiere lo que sí puedes hacer.
 - Para preguntas generales responde de lo que sabes, breve. No tienes internet.
-- Si tienes herramientas de agenda, úsalas para eventos y recordatorios. Al leer la agenda en voz alta di solo lo importante (hora y título), sin enumerar calendarios. «Mañana», «el viernes», «en dos horas»: calcúlalo con la fecha actual del mensaje.
+- Si tienes herramientas de agenda, úsalas para eventos y recordatorios. «Mañana», «el viernes», «en dos horas»: calcúlalo con la fecha actual del mensaje.
+- Al contar la agenda no recites todo. Si hay más de cuatro eventos, di cuántos son, menciona los tres o cuatro que se salen de la rutina o tienen hora fija (citas, reuniones, entregas) y ofrece el detalle del resto. No nombres calendarios ni repitas eventos duplicados.
+- Di las horas como se hablan: «a las dos de la tarde», «a las ocho y media de la noche»; nunca «catorce» ni «veinte treinta».
 
 Confirmaciones:
 - Las escenas marcadas «requiere confirmación» pídelas solo después de preguntar «¿Seguro que quieres …?» y de que el usuario diga que sí. Si intentas ejecutarlas antes, el sistema te lo bloqueará: entonces pregunta.
@@ -302,9 +304,12 @@ export class Asistente {
     try {
       switch (nombre) {
         case 'ver_agenda':
-          return { texto: JSON.stringify(await agenda.eventos(str(e.desde), str(e.hasta))), error: false };
+          return { texto: resumirEventos(await agenda.eventos(str(e.desde), str(e.hasta))), error: false };
         case 'ver_recordatorios':
-          return { texto: JSON.stringify(await agenda.recordatorios()), error: false };
+          return {
+            texto: JSON.stringify((await agenda.recordatorios()).map(({ id, titulo, vence }) => ({ id, titulo, vence }))),
+            error: false,
+          };
         case 'crear_evento': {
           const r = await agenda.crearEvento(str(e.titulo), str(e.inicio), str(e.fin));
           this.log(`ia → evento «${r.titulo}» ${r.inicio}`);
