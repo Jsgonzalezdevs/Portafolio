@@ -105,63 +105,113 @@ interface OpcionesFlujo {
   alEvento: (e: EventoSSE) => void;
   alCambioConexion: (c: EstadoConexion) => void;
   alNoAutorizado: () => void;
+  /** Milisegundos; solo los cambian los tests. */
+  tiempos?: { primerEvento?: number; silencio?: number; sondeo?: number };
 }
 
 /**
- * Mantiene abierto /eventos para siempre: reintenta con espera creciente y corta
- * la conexión si pasan 15 s sin datos (un túnel puede morir sin avisar, y la
- * tablet se quedaría mostrando datos viejos como si fueran actuales).
+ * Mantiene el estado de la Mac llegando para siempre.
+ *
+ * Primero intenta el flujo SSE (/eventos). Algunos proxies lo retienen entero
+ * en vez de pasarlo en vivo (el túnel rápido de Cloudflare, por ejemplo): si la
+ * conexión se abre pero en 8 s no llega ningún evento, pasa a consultar
+ * /estado cada 4 s y se queda así. Además, si un flujo que sí funcionaba pasa
+ * 15 s callado, se corta y se reconecta (un túnel puede morir sin avisar, y la
+ * tablet mostraría datos viejos como si fueran actuales).
  */
 export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
+  const T = { primerEvento: 8000, silencio: 15_000, sondeo: 4000, ...op.tiempos };
   let detenido = false;
   let ctrl: AbortController | null = null;
   let espera = 2000;
   let vigilante: number | undefined;
   let reintento: number | undefined;
+  let hubiEventos = false;
 
-  const vigilar = () => {
+  const vigilar = (ms: number) => {
     clearTimeout(vigilante);
-    vigilante = window.setTimeout(() => ctrl?.abort(), 15_000);
+    vigilante = window.setTimeout(() => ctrl?.abort(), ms);
+  };
+
+  const noAutorizado = () => {
+    detenido = true;
+    clearTimeout(vigilante);
+    op.alNoAutorizado();
+  };
+
+  const programar = (fn: () => void, ms: number) => {
+    if (!detenido) reintento = window.setTimeout(fn, ms);
+  };
+
+  const sondear = async () => {
+    if (detenido) return;
+    ctrl = new AbortController();
+    vigilar(10_000);
+    try {
+      const r = await fetch(`${e.agente}/estado`, {
+        headers: { Authorization: `Bearer ${e.token}` },
+        cache: 'no-store',
+        signal: ctrl.signal,
+      });
+      if (r.status === 401) return noAutorizado();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const datos = await r.text();
+      clearTimeout(vigilante);
+      op.alCambioConexion('en-linea');
+      op.alEvento({ evento: 'estado', datos });
+      espera = T.sondeo;
+    } catch {
+      clearTimeout(vigilante);
+      op.alCambioConexion('sin-conexion');
+      espera = Math.min(espera * 2, 30_000);
+    }
+    programar(sondear, espera);
   };
 
   const conectar = async () => {
     if (detenido) return;
     op.alCambioConexion('conectando');
     ctrl = new AbortController();
+    let eventosEstaConexion = 0;
+    let abierta = false;
     try {
-      vigilar();
+      vigilar(T.silencio);
       const r = await fetch(`${e.agente}/eventos`, {
         headers: { Authorization: `Bearer ${e.token}` },
         cache: 'no-store',
         signal: ctrl.signal,
       });
-      if (r.status === 401) {
-        detenido = true;
-        clearTimeout(vigilante);
-        op.alNoAutorizado();
-        return;
-      }
+      if (r.status === 401) return noAutorizado();
       if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+      abierta = true;
+      // El agente manda el primer estado al instante: 8 s sin nada = flujo retenido.
+      if (!hubiEventos) vigilar(T.primerEvento);
       const lector = r.body.getReader();
       const decodificador = new TextDecoder();
       const parsear = crearParserSSE();
       for (;;) {
         const { value, done } = await lector.read();
         if (done) break;
-        vigilar();
         for (const ev of parsear(decodificador.decode(value, { stream: true }))) {
+          eventosEstaConexion += 1;
+          hubiEventos = true;
+          vigilar(T.silencio);
           op.alCambioConexion('en-linea');
           espera = 2000;
           op.alEvento(ev);
         }
       }
     } catch {
-      /* red caída, túnel cerrado o vigilante: se reintenta abajo */
+      /* red caída, túnel cerrado o vigilante: se decide abajo */
     }
     clearTimeout(vigilante);
     if (detenido) return;
+    if (abierta && !eventosEstaConexion && !hubiEventos) {
+      espera = 0;
+      return void sondear();
+    }
     op.alCambioConexion('sin-conexion');
-    reintento = window.setTimeout(conectar, espera);
+    programar(conectar, espera);
     espera = Math.min(espera * 2, 30_000);
   };
 
