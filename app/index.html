@@ -87,13 +87,26 @@
       <section id="tarjeta-escenas" class="tarjeta" aria-labelledby="t-escenas">
         <h2 id="t-escenas">Casa</h2>
         <div id="escenas" class="rejilla"><p class="tenue">Sin escenas. Agrégalas en mac-agent/config.json.</p></div>
-      </section>
-
-      <section id="tarjeta-apps" class="tarjeta" aria-labelledby="t-apps">
-        <h2 id="t-apps">Apps</h2>
+        <h2 id="t-apps" class="subtitulo">Apps</h2>
         <div id="apps" class="rejilla"><p class="tenue">Sin apps permitidas.</p></div>
       </section>
+
+      <section id="tarjeta-agenda" class="tarjeta" aria-labelledby="t-agenda" hidden>
+        <h2 id="t-agenda">Agenda</h2>
+        <div id="agenda" class="agenda"><p class="tenue">Cargando…</p></div>
+      </section>
     </main>
+
+    <div id="aviso-recordatorio" class="recordatorio" role="alertdialog" aria-labelledby="recordatorio-titulo" hidden>
+      <div class="recordatorio__caja">
+        <p class="tenue">Recordatorio</p>
+        <p id="recordatorio-titulo" class="recordatorio__titulo"></p>
+        <div class="fila">
+          <button id="recordatorio-hecho" class="boton boton--primario" type="button">Hecho</button>
+          <button id="recordatorio-ok" class="boton" type="button">Cerrar</button>
+        </div>
+      </div>
+    </div>
 
     <div id="noche" class="noche" hidden><div id="noche-hora" class="noche__hora"></div></div>
     <div id="aviso" class="aviso" role="status" hidden></div>

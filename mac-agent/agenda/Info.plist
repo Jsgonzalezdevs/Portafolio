@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>lat.juliangonzalez.mac-agent.agenda</string>
+  <key>CFBundleName</key><string>Agenda del asistente</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>El asistente de la tablet lee tus eventos de hoy y crea los que le pidas.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>El asistente de la tablet lee y crea tus recordatorios, y te avisa cuando vencen.</string>
+</dict>
+</plist>

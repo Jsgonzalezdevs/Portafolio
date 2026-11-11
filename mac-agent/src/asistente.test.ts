@@ -171,3 +171,34 @@ test('«nueva» empieza otra conversación; el historial solo crece mientras tan
   await asistente.conversar('tres', true);
   assert.equal(peticiones[2].messages.length, 1);
 });
+
+test('herramientas de agenda: solo existen si hay agenda, y crean con los argumentos de Claude', async () => {
+  const creados: unknown[] = [];
+  const agenda = {
+    crearRecordatorio: async (titulo: string, vence: string | null) => {
+      creados.push([titulo, vence]);
+      return { id: 'r1', titulo, vence, lista: 'Hogar' };
+    },
+    eventos: async () => [{ titulo: 'Dentista', inicio: '2026-11-12T08:00:00-05:00' }],
+  } as unknown as import('./agenda.ts').Agenda;
+
+  const sinAgenda = montar([mensaje('end_turn', [texto('ok')])]);
+  await sinAgenda.asistente.conversar('hola');
+  assert.ok(!sinAgenda.peticiones[0].tools?.some((t) => 'name' in t && t.name === 'ver_agenda'));
+
+  const g = guion([
+    mensaje('tool_use', [herramienta('r', 'crear_recordatorio', { titulo: 'Sacar la basura', vence: '2026-11-11T20:00' })]),
+    mensaje('end_turn', [texto('Listo, te aviso a las ocho.')]),
+  ]);
+  const a = new Asistente({
+    config,
+    acciones: crearAcciones(config, async () => ''),
+    leerEstado: async () => ({}) as EstadoMac,
+    crearMensaje: g.crear,
+    agenda,
+  });
+  const r = await a.conversar('recuérdame sacar la basura a las 8 de la noche');
+  assert.ok(g.peticiones[0].tools?.some((t) => 'name' in t && t.name === 'ver_agenda'));
+  assert.deepEqual(creados, [['Sacar la basura', '2026-11-11T20:00']]);
+  assert.deepEqual(r.acciones, [{ herramienta: 'agenda.crear_recordatorio', ok: true, mensaje: 'Recordatorio «Sacar la basura» creado' }]);
+});

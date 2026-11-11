@@ -2,7 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts';
-import { cargarClaveAnthropic, cargarConfig, type Config } from './config.ts';
+import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
+import { cargarClaveAnthropic, cargarConfig, RAIZ, type Config } from './config.ts';
 import { ejecutar } from './ejecutor.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
 
@@ -11,6 +12,8 @@ interface Dependencias {
   monitor: Pick<Monitor, 'leer'>;
   acciones: ReturnType<typeof crearAcciones>;
   asistente?: Pick<Asistente, 'conversar'>;
+  agenda?: Agenda;
+  avisador?: Pick<Avisador, 'pendientes' | 'descartar' | 'olvidarPermiso'>;
   log?: (linea: string) => void;
   intervaloMs?: number;
 }
@@ -19,7 +22,16 @@ const MAX_CUERPO = 16 * 1024;
 const MAX_FALLOS = 10;
 const VENTANA_FALLOS_MS = 60_000;
 
-export function crearServidor({ config, monitor, acciones, asistente, log = console.log, intervaloMs = 3000 }: Dependencias): Server {
+export function crearServidor({
+  config,
+  monitor,
+  acciones,
+  asistente,
+  agenda,
+  avisador,
+  log = console.log,
+  intervaloMs = 3000,
+}: Dependencias): Server {
   const token = Buffer.from(config.token);
   const fallos = new Map<string, { n: number; hasta: number }>();
   const suscriptores = new Set<ServerResponse>();
@@ -68,6 +80,9 @@ export function crearServidor({ config, monitor, acciones, asistente, log = cons
       req.on('error', reject);
     });
 
+  /** El estado lleva además los avisos de recordatorios vencidos. */
+  const leerEstado = async () => ({ ...(await monitor.leer()), avisos: avisador?.pendientes ?? [] });
+
   const emitir = (estado: EstadoMac) => {
     const datos = `event: estado\ndata: ${JSON.stringify(estado)}\n\n`;
     for (const res of suscriptores) res.write(datos);
@@ -75,7 +90,7 @@ export function crearServidor({ config, monitor, acciones, asistente, log = cons
 
   const muestrear = async () => {
     try {
-      emitir(await monitor.leer());
+      emitir(await leerEstado());
     } catch (e) {
       log(`error leyendo estado: ${(e as Error).message}`);
     }
@@ -122,7 +137,7 @@ export function crearServidor({ config, monitor, acciones, asistente, log = cons
     }
 
     try {
-      if (req.method === 'GET' && url.pathname === '/estado') return json(res, 200, await monitor.leer());
+      if (req.method === 'GET' && url.pathname === '/estado') return json(res, 200, await leerEstado());
 
       if (req.method === 'GET' && url.pathname === '/catalogo') {
         return json(res, 200, {
@@ -130,6 +145,7 @@ export function crearServidor({ config, monitor, acciones, asistente, log = cons
           escenas: config.escenas.map(({ id, nombre }) => ({ id, nombre })),
           apps: config.apps.map(({ id, nombre }) => ({ id, nombre })),
           chat: Boolean(asistente),
+          agenda: Boolean(agenda),
         });
       }
 
@@ -150,6 +166,42 @@ export function crearServidor({ config, monitor, acciones, asistente, log = cons
         if (!temporizador) temporizador = setInterval(muestrear, intervaloMs);
         void muestrear();
         return;
+      }
+
+      if (url.pathname === '/agenda' || url.pathname.startsWith('/agenda/') || url.pathname.startsWith('/avisos/')) {
+        if (!agenda) return json(res, 404, { error: 'La agenda no está instalada en este agente' });
+
+        if (req.method === 'GET' && url.pathname === '/agenda') {
+          const permisos = await agenda.permisos();
+          const hoy = new Date();
+          hoy.setHours(0, 0, 0, 0);
+          const pasadoManana = new Date(hoy.getTime() + 2 * 86400_000);
+          const [eventos, recordatorios] = await Promise.all([
+            permisos.calendario === 'concedido' ? agenda.eventos(fechaLocal(hoy), fechaLocal(pasadoManana)) : [],
+            permisos.recordatorios === 'concedido' ? agenda.recordatorios() : [],
+          ]);
+          return json(res, 200, { permisos, eventos, recordatorios: recordatorios.slice(0, 12) });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/agenda/permisos') {
+          // Abre el diálogo de macOS en la Mac: alguien tiene que aceptarlo allí.
+          const r = await agenda.pedirPermisos();
+          avisador?.olvidarPermiso();
+          log(`permisos de agenda: ${JSON.stringify(r)}`);
+          return json(res, 200, r);
+        }
+
+        const aviso = /^\/avisos\/([^/]+)\/descartar$/.exec(url.pathname);
+        if (req.method === 'POST' && aviso) {
+          const id = decodeURIComponent(aviso[1]);
+          const { completar } = await leerCuerpo(req);
+          avisador?.descartar(id);
+          if (completar === true) await agenda.completarRecordatorio(id);
+          json(res, 200, { ok: true });
+          if (suscriptores.size) void muestrear();
+          return;
+        }
+        return json(res, 404, { error: 'Ruta no encontrada' });
       }
 
       if (req.method === 'POST' && url.pathname === '/chat') {
@@ -196,19 +248,34 @@ if (import.meta.main) {
   const log = (l: string) => console.log(`[${new Date().toISOString()}] ${l}`);
   const monitor = new Monitor(ejecutar);
   const acciones = crearAcciones(config, ejecutar);
+  const agenda = agendaInstalada(RAIZ, ejecutar);
+  const avisador = agenda ? new Avisador(agenda) : undefined;
+  if (!agenda) log('agenda no instalada (falta «Agenda del asistente.app»): sin calendario ni recordatorios');
   const servidor = crearServidor({
     config,
     monitor,
     acciones,
+    agenda,
+    avisador,
     asistente: new Asistente({
       config,
       acciones,
+      agenda,
       leerEstado: () => monitor.leer(),
       crearMensaje: crearClienteClaude(cargarClaveAnthropic()),
       log,
     }),
     log,
   });
+  if (avisador) {
+    // Cada minuto: ¿venció algún recordatorio? El panel lo recibe en el estado.
+    setInterval(() => {
+      avisador.revisar().then(
+        (nuevo) => nuevo && log(`aviso: ${avisador.pendientes.map((a) => a.titulo).join(', ')}`),
+        (e: Error) => log(`avisos: ${e.message}`),
+      );
+    }, 60_000).unref();
+  }
   servidor.listen(config.puerto, config.host, () => {
     console.log(`mac-agent escuchando en http://${config.host}:${config.puerto}`);
     console.log(`Token guardado en mac-agent/.token (o AGENT_TOKEN). Úsalo para emparejar la tablet en /app.`);

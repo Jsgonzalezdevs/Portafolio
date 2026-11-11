@@ -53,7 +53,7 @@ test('salud no pide token; estado sí', async () => {
   assert.equal((await fetch(`${base}/estado`, { headers: { Authorization: 'Bearer malo' } })).status, 401);
   const r = await fetch(`${base}/estado`, { headers: auth });
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), estadoFalso);
+  assert.deepEqual(await r.json(), { ...estadoFalso, avisos: [] });
 });
 
 test('CORS: permite el dominio y rechaza otros orígenes', async () => {
@@ -124,6 +124,55 @@ test('/chat pasa el texto al asistente y devuelve su respuesta', async () => {
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { respuesta: 'Hola', acciones: [], esperandoConfirmacion: false });
   assert.deepEqual(recibido, ['hola', true]);
+  s.close();
+});
+
+
+test('/agenda: 404 sin agenda; con agenda devuelve permisos, eventos y recordatorios; avisos se descartan', async () => {
+  assert.equal((await fetch(`${base}/agenda`, { headers: auth })).status, 404);
+
+  const descartados: string[] = [];
+  const completados: string[] = [];
+  const s = crearServidor({
+    config,
+    monitor: { leer: async () => estadoFalso },
+    acciones: crearAcciones(config, async () => ''),
+    agenda: {
+      permisos: async () => ({ calendario: 'concedido', recordatorios: 'sin-decidir' }),
+      eventos: async () => [{ titulo: 'Dentista' }],
+      recordatorios: async () => {
+        throw new Error('no debería llamarse sin permiso');
+      },
+      completarRecordatorio: async (id: string) => {
+        completados.push(id);
+        return { titulo: 'x' };
+      },
+    } as unknown as import('./agenda.ts').Agenda,
+    avisador: {
+      pendientes: [{ id: 'r/1', titulo: 'Pastilla', vence: '2026-11-11T15:00' }],
+      descartar: (id: string) => (descartados.push(id), true),
+      olvidarPermiso: () => {},
+    },
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  const ag = (await (await fetch(`${b}/agenda`, { headers: auth })).json()) as Record<string, unknown>;
+  assert.deepEqual(ag, {
+    permisos: { calendario: 'concedido', recordatorios: 'sin-decidir' },
+    eventos: [{ titulo: 'Dentista' }],
+    recordatorios: [],
+  });
+  const est = (await (await fetch(`${b}/estado`, { headers: auth })).json()) as { avisos: unknown[] };
+  assert.equal(est.avisos.length, 1);
+  const r = await fetch(`${b}/avisos/${encodeURIComponent('r/1')}/descartar`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ completar: true }),
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(descartados, ['r/1']);
+  assert.deepEqual(completados, ['r/1']);
   s.close();
 });
 

@@ -23,6 +23,12 @@ Todas las rutas, salvo `/salud`, piden `Authorization: Bearer <token>`.
 | GET | `/eventos` | Flujo SSE: evento `estado` cada 3 s |
 | POST | `/acciones/:id` | Ejecuta una acción con cuerpo JSON |
 | POST | `/chat` | `{ texto, nueva? }` → `{ respuesta, acciones, esperandoConfirmacion }` |
+| GET | `/agenda` | Permisos, eventos de hoy y mañana, recordatorios pendientes |
+| POST | `/agenda/permisos` | Abre en la Mac el aviso de permisos de macOS |
+| POST | `/avisos/:id/descartar` | `{ completar? }` cierra el aviso de un recordatorio vencido |
+
+`/estado` y los eventos `estado` llevan además `avisos`: los recordatorios que
+acaban de vencer.
 
 Acciones: `volumen.fijar {nivel}`, `volumen.silenciar {silenciar}`,
 `media.playpause`, `media.siguiente`, `media.anterior`, `pantalla.apagar`,
@@ -74,6 +80,35 @@ También sirven `ANTHROPIC_API_KEY` o un perfil de `ant auth login`. Sin
 ninguno, el chat responde «Falta la clave de Claude» y el resto del panel sigue
 funcionando.
 
+## Agenda: Calendario y Recordatorios
+
+El agente usa el **Calendario y los Recordatorios de macOS** (EventKit) a
+través de una mini app en Swift, `Agenda del asistente.app`, que compila el
+instalador. El Calendario de macOS junta todas las cuentas configuradas en la
+Mac (iCloud, Google…), así que no hay que conectar nada más.
+
+- **Panel**: la tarjeta «Agenda» muestra los eventos de hoy y mañana y los
+  recordatorios pendientes.
+- **Claude**: puede ver la agenda, crear eventos, y ver, crear y completar
+  recordatorios («recuérdame sacar la basura a las 8»).
+- **Avisos**: cuando vence un recordatorio con hora, la tablet muestra un aviso
+  grande y lo dice en voz alta. El recordatorio también suena en el iPhone,
+  porque vive en Recordatorios de Apple. Solo se anuncian los que vencieron
+  hace menos de 15 minutos, así que al arrancar no recita los atrasados.
+- **Permiso**: la primera vez, toca «Pedir permiso en la Mac» en la tarjeta y
+  acepta los dos avisos de macOS (Calendarios y Recordatorios) en la pantalla
+  de la Mac. Si los negaste, se cambian en Ajustes del Sistema › Privacidad y
+  seguridad.
+
+Por qué es una app aparte y se lanza con `open`: macOS atribuye el permiso al
+proceso «responsable». Un binario suelto lanzado por node heredaría la
+petición de node, que no declara para qué quiere el calendario, y macOS la
+negaría sin preguntar. Si cambia `agenda/agenda.swift`, el instalador recompila
+la app y macOS puede volver a pedir el permiso.
+
+Necesita `swiftc` (`xcode-select --install`). Sin él, el agente funciona igual
+pero sin agenda.
+
 ## Instalar en la Mac
 
 ```bash
@@ -119,6 +154,24 @@ launchctl kickstart -k gui/$(id -u)/lat.juliangonzalez.mac-agent
 `juliangonzalez.lat/app` se sirve por HTTPS, y el navegador bloquea las llamadas
 de esa página a `http://192.168.x.x`. Por eso el agente se publica con un túnel.
 Hay dos caminos:
+
+**Rápido · túnel de Cloudflare sin cuenta**:
+
+```bash
+zsh mac-agent/scripts/tunel.sh
+```
+
+Descarga `cloudflared` (comprueba que esté firmado por Cloudflare), lo deja
+como servicio e imprime el enlace de emparejamiento. La URL
+`*.trycloudflare.com` **cambia cada vez que el túnel se reinicia** (también al
+reiniciar la Mac). Para ver el enlace actual:
+
+```bash
+zsh mac-agent/scripts/tunel.sh enlace
+```
+
+Este túnel no pasa el flujo SSE en vivo; el panel lo detecta y consulta
+`/estado` cada 4 s. Para una URL fija usa una de estas dos:
 
 **A · Tailscale Funnel** (no exige mover el DNS):
 

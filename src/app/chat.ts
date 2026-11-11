@@ -18,6 +18,7 @@ interface RespuestaChat {
 interface Opciones {
   emparejamiento: () => Emparejamiento | null;
   alNoAutorizado: () => void;
+  alAcciones?: (acciones: RespuestaChat['acciones']) => void;
 }
 
 /** Puente que expone la app Android (android/) dentro de su WebView. */
@@ -53,7 +54,7 @@ type Reconocimiento = {
   stop: () => void;
 };
 
-export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
+export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const historial = $('chat-historial');
   const campo = $('chat-texto') as HTMLInputElement;
@@ -107,6 +108,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
       nueva = false;
       pensando.className = 'chat__ia';
       pensando.textContent = r.respuesta;
+      if (r.acciones.length) alAcciones?.(r.acciones);
       const fallidas = r.acciones.filter((a) => !a.ok);
       if (fallidas.length) {
         const nota = document.createElement('small');

@@ -10,6 +10,7 @@ import {
   type Emparejamiento,
   type EstadoConexion,
 } from './conexion';
+import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
 import { bytes, duracion, esDeNoche, porcentaje } from './formato';
 
@@ -25,10 +26,13 @@ interface EstadoMac {
   disco: { libreBytes: number; totalBytes: number } | null;
   bateria: { porcentaje: number; cargando: boolean; conectada: boolean } | null;
   volumen: { nivel: number; silenciado: boolean } | null;
+  /** Recordatorios que acaban de vencer. */
+  avisos?: Aviso[];
 }
 
 interface Catalogo {
   chat?: boolean;
+  agenda?: boolean;
   escenas: { id: string; nombre: string }[];
   apps: { id: string; nombre: string }[];
 }
@@ -124,6 +128,7 @@ function pintarEstado(e: EstadoMac) {
   $('uptime').textContent = duracion(e.uptimeSeg);
   $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
 
+  agendaUI.mostrarAvisos(e.avisos);
   ultimoVolumen = e.volumen;
   const rango = $<HTMLInputElement>('volumen');
   rango.disabled = !e.volumen;
@@ -220,6 +225,7 @@ async function iniciar(e: Emparejamiento) {
   pintarBotones('escenas', 'escena.ejecutar', catalogo.escenas);
   pintarBotones('apps', 'app.abrir', catalogo.apps);
   $('tarjeta-chat').hidden = !catalogo.chat;
+  agendaUI.activar(Boolean(catalogo.agenda));
   $('pantalla-panel').classList.toggle('panel--sin-chat', !catalogo.chat);
   $('pantalla-emparejar').hidden = true;
   $('pantalla-panel').hidden = false;
@@ -270,7 +276,26 @@ if (nativo) {
   });
 }
 
+const agendaUI = iniciarAgenda({
+  emparejamiento: () => emparejamiento,
+  alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
+  hablar: (texto) => {
+    if (nativo) return nativo.hablar(texto, false);
+    const u = new SpeechSynthesisUtterance(texto);
+    u.lang = 'es-CO';
+    window.speechSynthesis?.speak(u);
+  },
+  despertar: () => {
+    despiertoHasta = Date.now() + 60_000;
+    $('noche').hidden = true;
+  },
+});
+
 iniciarChat({
+  // Si Claude tocó la agenda, la tarjeta se actualiza al momento.
+  alAcciones: (acciones) => {
+    if (acciones.some((a) => a.herramienta.startsWith('agenda.'))) agendaUI.recargar();
+  },
   emparejamiento: () => emparejamiento,
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
 });

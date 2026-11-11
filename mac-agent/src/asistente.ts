@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import type { crearAcciones } from './acciones.ts';
+import type { Agenda } from './agenda.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
 
@@ -57,6 +58,8 @@ interface Dependencias {
   acciones: Acciones;
   leerEstado: () => Promise<EstadoMac>;
   crearMensaje: CrearMensaje;
+  /** Calendario y Recordatorios de macOS; sin ella, Claude no recibe esas herramientas. */
+  agenda?: Agenda;
   ahora?: () => Date;
   log?: (linea: string) => void;
 }
@@ -65,7 +68,54 @@ function objeto(propiedades: Record<string, unknown>, requeridas: string[]) {
   return { type: 'object' as const, properties: propiedades, required: requeridas, additionalProperties: false };
 }
 
-export function construirHerramientas(config: Pick<Config, 'escenas' | 'apps'>): Anthropic.Beta.BetaTool[] {
+const FECHA = 'Fecha y hora local en formato 2026-11-12T08:30';
+
+const HERRAMIENTAS_AGENDA: Anthropic.Beta.BetaTool[] = [
+  {
+    name: 'ver_agenda',
+    description: 'Lista los eventos del calendario entre dos fechas (todas las cuentas de la Mac: iCloud, Google…).',
+    input_schema: objeto(
+      { desde: { type: 'string', description: FECHA }, hasta: { type: 'string', description: FECHA } },
+      ['desde', 'hasta'],
+    ),
+  },
+  {
+    name: 'crear_evento',
+    description: 'Crea un evento en el calendario por defecto. Si no dicen cuánto dura, una hora.',
+    input_schema: objeto(
+      {
+        titulo: { type: 'string' },
+        inicio: { type: 'string', description: FECHA },
+        fin: { type: 'string', description: FECHA },
+      },
+      ['titulo', 'inicio', 'fin'],
+    ),
+  },
+  {
+    name: 'ver_recordatorios',
+    description: 'Lista los recordatorios pendientes (app Recordatorios), con su id y fecha.',
+    input_schema: objeto({}, []),
+  },
+  {
+    name: 'crear_recordatorio',
+    description:
+      'Crea un recordatorio. Con fecha, suena en el iPhone y la tablet lo anuncia a esa hora. Sin fecha, vence = null.',
+    input_schema: objeto(
+      { titulo: { type: 'string' }, vence: { type: ['string', 'null'], description: `${FECHA}, o null` } },
+      ['titulo', 'vence'],
+    ),
+  },
+  {
+    name: 'completar_recordatorio',
+    description: 'Marca un recordatorio como hecho. El id sale de ver_recordatorios.',
+    input_schema: objeto({ id: { type: 'string' } }, ['id']),
+  },
+];
+
+export function construirHerramientas(
+  config: Pick<Config, 'escenas' | 'apps'>,
+  conAgenda = false,
+): Anthropic.Beta.BetaTool[] {
   const herramientas: Anthropic.Beta.BetaTool[] = [
     {
       name: 'leer_estado_mac',
@@ -110,6 +160,7 @@ export function construirHerramientas(config: Pick<Config, 'escenas' | 'apps'>):
       input_schema: objeto({ id: { type: 'string', enum: config.escenas.map((e) => e.id) } }, ['id']),
     });
   }
+  if (conAgenda) herramientas.push(...HERRAMIENTAS_AGENDA);
   return herramientas.map((h) => ({ ...h, strict: true }));
 }
 
@@ -121,7 +172,8 @@ Cómo respondes:
 - Si una orden es clara, actúa con la herramienta y confirma en pocas palabras lo que pasó. No anuncies lo que vas a hacer.
 - Nunca digas que hiciste algo si la herramienta falló o no la usaste; di qué pasó.
 - Si algo no está a tu alcance (no hay herramienta para eso), dilo en una frase y, si sirve, sugiere lo que sí puedes hacer.
-- Para preguntas generales responde de lo que sabes, breve. No tienes internet ni calendario todavía.
+- Para preguntas generales responde de lo que sabes, breve. No tienes internet.
+- Si tienes herramientas de agenda, úsalas para eventos y recordatorios. Al leer la agenda en voz alta di solo lo importante (hora y título), sin enumerar calendarios. «Mañana», «el viernes», «en dos horas»: calcúlalo con la fecha actual del mensaje.
 
 Confirmaciones:
 - Las escenas marcadas «requiere confirmación» pídelas solo después de preguntar «¿Seguro que quieres …?» y de que el usuario diga que sí. Si intentas ejecutarlas antes, el sistema te lo bloqueará: entonces pregunta.
@@ -168,7 +220,7 @@ export class Asistente {
 
   constructor(deps: Dependencias) {
     this.deps = deps;
-    this.herramientas = construirHerramientas(deps.config);
+    this.herramientas = construirHerramientas(deps.config, Boolean(deps.agenda));
     this.ahora = deps.ahora ?? (() => new Date());
     this.log = deps.log ?? (() => {});
   }
@@ -189,6 +241,8 @@ export class Asistente {
   ): Promise<{ texto: string; error: boolean; registro?: AccionRealizada; bloqueada?: boolean }> {
     const entrada = (uso.input ?? {}) as Record<string, unknown>;
     if (uso.name === 'leer_estado_mac') return { texto: describirEstado(await this.deps.leerEstado()), error: false };
+    const agenda = await this.usarAgenda(uso.name, entrada);
+    if (agenda) return agenda;
 
     const ORDENES: Record<string, string> = {
       reproducir_pausar: 'media.playpause',
@@ -234,6 +288,43 @@ export class Asistente {
       this.log(`ia → ${idAccion} falló: ${mensaje}`);
       return { texto: `Falló: ${mensaje}`, error: true, registro: { herramienta: idAccion, ok: false, mensaje } };
     }
+  }
+
+  /** Herramientas de agenda: null si la herramienta no es de agenda. */
+  private async usarAgenda(
+    nombre: string,
+    e: Record<string, unknown>,
+  ): Promise<{ texto: string; error: boolean; registro?: AccionRealizada } | null> {
+    const agenda = this.deps.agenda;
+    if (!agenda || !HERRAMIENTAS_AGENDA.some((h) => h.name === nombre)) return null;
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    const registro = (mensaje: string, ok = true): AccionRealizada => ({ herramienta: `agenda.${nombre}`, ok, mensaje });
+    try {
+      switch (nombre) {
+        case 'ver_agenda':
+          return { texto: JSON.stringify(await agenda.eventos(str(e.desde), str(e.hasta))), error: false };
+        case 'ver_recordatorios':
+          return { texto: JSON.stringify(await agenda.recordatorios()), error: false };
+        case 'crear_evento': {
+          const r = await agenda.crearEvento(str(e.titulo), str(e.inicio), str(e.fin));
+          this.log(`ia → evento «${r.titulo}» ${r.inicio}`);
+          return { texto: JSON.stringify(r), error: false, registro: registro(`Evento «${r.titulo}» creado`) };
+        }
+        case 'crear_recordatorio': {
+          const r = await agenda.crearRecordatorio(str(e.titulo), typeof e.vence === 'string' && e.vence ? e.vence : null);
+          this.log(`ia → recordatorio «${r.titulo}» ${r.vence ?? 'sin fecha'}`);
+          return { texto: JSON.stringify(r), error: false, registro: registro(`Recordatorio «${r.titulo}» creado`) };
+        }
+        case 'completar_recordatorio': {
+          const r = await agenda.completarRecordatorio(str(e.id));
+          return { texto: JSON.stringify(r), error: false, registro: registro(`«${r.titulo}» completado`) };
+        }
+      }
+    } catch (err) {
+      const mensaje = (err as Error).message;
+      return { texto: `Falló: ${mensaje}`, error: true, registro: registro(mensaje, false) };
+    }
+    return null;
   }
 
   async conversar(textoCrudo: unknown, nueva = false): Promise<RespuestaChat> {

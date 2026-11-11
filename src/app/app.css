@@ -57,16 +57,16 @@ code { background: var(--borde); padding: 1px 6px; border-radius: 4px; }
   grid-template-rows: auto 1fr;
   grid-template-areas:
     'reloj mac control'
-    'chat escenas apps';
+    'chat escenas agenda';
 }
 .panel__reloj { grid-area: reloj; display: flex; flex-direction: column; justify-content: center; padding: 0 12px; }
 #tarjeta-mac { grid-area: mac; }
 #tarjeta-control { grid-area: control; }
 #tarjeta-escenas { grid-area: escenas; overflow-y: auto; }
-#tarjeta-apps { grid-area: apps; overflow-y: auto; }
+#tarjeta-agenda { grid-area: agenda; overflow-y: auto; }
 #tarjeta-chat { grid-area: chat; }
 /* Sin chat (agente sin IA), el reloj vuelve a ocupar toda la columna. */
-.panel--sin-chat { grid-template-areas: 'reloj mac control' 'reloj escenas apps'; }
+.panel--sin-chat { grid-template-areas: 'reloj mac control' 'reloj escenas agenda'; }
 
 @media (orientation: portrait), (max-width: 900px) {
   html, body { overflow: auto; }
@@ -74,10 +74,10 @@ code { background: var(--borde); padding: 1px 6px; border-radius: 4px; }
     height: auto;
     grid-template-columns: 1fr;
     grid-template-rows: none;
-    grid-template-areas: 'reloj' 'chat' 'mac' 'control' 'escenas' 'apps';
+    grid-template-areas: 'reloj' 'chat' 'agenda' 'mac' 'control' 'escenas';
   }
   .panel__reloj { padding: 12px 4px; }
-  .panel--sin-chat { grid-template-areas: 'reloj' 'mac' 'control' 'escenas' 'apps'; }
+  .panel--sin-chat { grid-template-areas: 'reloj' 'agenda' 'mac' 'control' 'escenas'; }
   .chat { height: 60vh; }
 }
 
@@ -173,3 +173,23 @@ input[type='url'], input[type='password'] {
   -webkit-user-select: text; user-select: text;
 }
 #chat-mic.escuchando { background: var(--peligro); border-color: var(--peligro); color: #fff; }
+
+/* Casa + apps en una sola tarjeta */
+.subtitulo { margin-top: 18px; }
+
+/* Agenda */
+.agenda h3 { margin: 12px 0 6px; font-size: 13px; font-weight: 600; color: var(--tenue); text-transform: uppercase; letter-spacing: 0.06em; }
+.agenda h3:first-child { margin-top: 0; }
+.agenda ul { list-style: none; margin: 0; padding: 0; }
+.agenda li { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--borde); font-size: 16px; }
+.agenda li:last-child { border-bottom: 0; }
+.agenda time { flex: 0 0 52px; color: var(--acento); font-variant-numeric: tabular-nums; }
+.agenda .vencido time { color: var(--alerta); }
+.agenda .permiso { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+
+/* Aviso de recordatorio: grande, encima de todo (también del modo noche) */
+.recordatorio { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 30; background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.recordatorio__caja { background: var(--tarjeta); border: 2px solid var(--alerta); border-radius: 20px; padding: 28px 32px; max-width: 560px; width: 100%; text-align: center; }
+.recordatorio__caja p { margin: 0 0 8px; }
+.recordatorio__titulo { font-size: 34px; font-weight: 500; margin-bottom: 24px !important; }
+.recordatorio .fila { justify-content: center; }

@@ -2,11 +2,7 @@
   "puerto": 8787,
   "host": "127.0.0.1",
   "origenes": ["https://juliangonzalez.lat", "https://www.juliangonzalez.lat", "http://localhost:5173"],
-  "escenas": [
-    { "id": "luces-sala", "nombre": "Luces sala", "atajo": "Encender luces sala" },
-    { "id": "buenas-noches", "nombre": "Buenas noches", "atajo": "Buenas noches" },
-    { "id": "abrir-puerta", "nombre": "Abrir puerta", "atajo": "Abrir puerta", "confirmar": true }
-  ],
+  "escenas": [],
   "apps": [
     { "id": "spotify", "nombre": "Spotify", "app": "Spotify" },
     { "id": "safari", "nombre": "Safari", "app": "Safari" }
