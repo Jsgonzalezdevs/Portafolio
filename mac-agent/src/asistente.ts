@@ -409,7 +409,7 @@ function traducirError(e: unknown): ErrorDeAsistente {
 }
 
 const SIN_CLAVE = new ErrorDeAsistente(
-  'Falta la clave de Claude: guárdala en .anthropic-key junto al agente o en ANTHROPIC_API_KEY.',
+  'Falta la llave del chat. Copia tu llave de Groq (gratis) o de Claude y ejecuta:  zsh mac-agent/scripts/llave.sh',
   503,
 );
 

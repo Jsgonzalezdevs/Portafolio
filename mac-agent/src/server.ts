@@ -3,7 +3,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts';
 import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
-import { cargarClaveAnthropic, cargarConfig, RAIZ, type Config } from './config.ts';
+import { cargarClaveAnthropic, cargarClaveGroq, cargarConfig, RAIZ, type Config } from './config.ts';
+import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
 import { ejecutar } from './ejecutor.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
 
@@ -251,6 +252,20 @@ if (import.meta.main) {
   const agenda = agendaInstalada(RAIZ, ejecutar);
   const avisador = agenda ? new Avisador(agenda) : undefined;
   if (!agenda) log('agenda no instalada (falta «Agenda del asistente.app»): sin calendario ni recordatorios');
+  // Proveedor del chat: con `auto`, basta con que exista la llave de Groq para usarlo.
+  const claveGroq = cargarClaveGroq();
+  const { proveedor } = config.asistente;
+  const usarGroq = proveedor === 'groq' || (proveedor === 'auto' && Boolean(claveGroq));
+  const modelosGroq = config.asistente.modelosGroq.length ? config.asistente.modelosGroq : MODELOS_GROQ;
+  const crearMensaje = usarGroq
+    ? claveGroq
+      ? crearClienteGroq(claveGroq, modelosGroq)
+      : async () => {
+          throw new ErrorDeAsistente('Falta la llave de Groq: ejecuta  zsh mac-agent/scripts/llave.sh', 503);
+        }
+    : crearClienteClaude(cargarClaveAnthropic());
+  log(`chat: ${usarGroq ? `Groq (${modelosGroq.join(' → ')})` : `Claude (${config.asistente.modelo})`}`);
+
   const servidor = crearServidor({
     config,
     monitor,
@@ -262,7 +277,7 @@ if (import.meta.main) {
       acciones,
       agenda,
       leerEstado: () => monitor.leer(),
-      crearMensaje: crearClienteClaude(cargarClaveAnthropic()),
+      crearMensaje,
       log,
     }),
     log,

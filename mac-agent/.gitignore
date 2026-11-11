@@ -4,3 +4,4 @@ config.json
 logs/
 .anthropic-key
 node_modules/
+.groq-key

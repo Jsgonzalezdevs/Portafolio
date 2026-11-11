@@ -16,7 +16,7 @@ const config: Config = {
   origenes: [ORIGEN],
   escenas: [{ id: 'noche', nombre: 'Noche', atajo: 'Buenas "noches"; rm -rf /' }],
   apps: [{ id: 'safari', nombre: 'Safari', app: 'Safari' }],
-  asistente: { modelo: 'claude-opus-5-5', esfuerzo: 'low', minutosConversacion: 10 },
+  asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
   token: TOKEN,
 };
 

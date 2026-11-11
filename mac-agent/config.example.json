@@ -8,6 +8,7 @@
     { "id": "safari", "nombre": "Safari", "app": "Safari" }
   ],
   "asistente": {
+    "proveedor": "auto",
     "modelo": "claude-opus-5-5",
     "esfuerzo": "low",
     "minutosConversacion": 10

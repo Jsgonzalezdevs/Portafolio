@@ -84,10 +84,9 @@ for _ in {1..10}; do
   curl -fsS "http://127.0.0.1:8787/salud" >/dev/null 2>&1 && break
   sleep 0.5
 done
-if [[ ! -f "$DESTINO/.anthropic-key" ]]; then
-  echo "Falta la clave de Claude para el chat. Guárdala así (no queda en el historial de la terminal):"
-  echo "  pbpaste > \"$DESTINO/.anthropic-key\" && chmod 600 \"$DESTINO/.anthropic-key\""
-  echo "y vuelve a ejecutar este script."
+if [[ ! -f "$DESTINO/.groq-key" && ! -f "$DESTINO/.anthropic-key" ]]; then
+  echo "Falta la llave del chat. Copia tu llave de Groq (gratis, console.groq.com/keys) y ejecuta:"
+  echo "  zsh mac-agent/scripts/llave.sh"
 fi
 
 if [[ -d "$DESTINO/Agenda del asistente.app" ]]; then

@@ -61,23 +61,31 @@ para leerse en voz alta: una o dos frases, sin formato.
 - **Fecha y hora**: van en cada mensaje, no en las instrucciones fijas, para
   que la caché del prompt siga sirviendo.
 
-### Clave de la API
+### Llave del chat (Groq gratis o Claude)
 
-El agente corre bajo launchd y no ve las variables de tu terminal. Guarda la
-clave en un archivo junto al agente (cópiala primero al portapapeles):
-
-```bash
-pbpaste > ~/Library/Application\ Support/mac-agent/.anthropic-key && chmod 600 ~/Library/Application\ Support/mac-agent/.anthropic-key
-```
-
-Después reinicia el agente:
+Un solo paso: copia la llave al portapapeles y ejecuta
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/lat.juliangonzalez.mac-agent
+zsh mac-agent/scripts/llave.sh
 ```
 
-También sirven `ANTHROPIC_API_KEY` o un perfil de `ant auth login`. Sin
-ninguno, el chat responde «Falta la clave de Claude» y el resto del panel sigue
+El script reconoce de quién es la llave (`gsk_…` = Groq, `sk-ant-…` = Claude),
+la comprueba, la guarda con permisos 600 junto al agente, vacía el portapapeles
+y reinicia el agente. La llave nunca se escribe en la terminal.
+
+- **Groq** (gratis): crea la llave en <https://console.groq.com/keys>. El
+  agente usa `openai/gpt-oss-120b` y, si falla o se acaba el cupo gratuito,
+  pasa solo a `llama-3.3-70b-versatile`. Se cambian con
+  `asistente.modelosGroq` en `config.json`.
+- **Claude**: llave de <https://console.anthropic.com>. Usa `asistente.modelo`.
+
+Con `"proveedor": "auto"` (por defecto) manda Groq si hay llave de Groq; si no,
+Claude. Para forzar uno, pon `"groq"` o `"claude"`. El resto (herramientas,
+confirmaciones, agenda) funciona igual con los dos: lo que protege la Mac lo
+impone el agente, no el modelo. Los modelos de Groq se equivocan algo más al
+usar herramientas, sobre todo con fechas.
+
+Sin ninguna llave, el chat responde que falta y el resto del panel sigue
 funcionando.
 
 ## Agenda: Calendario y Recordatorios

@@ -15,7 +15,7 @@ const config: Pick<Config, 'escenas' | 'apps' | 'asistente'> = {
     { id: 'puerta', nombre: 'Abrir puerta', atajo: 'Abrir puerta', confirmar: true },
   ],
   apps: [{ id: 'safari', nombre: 'Safari', app: 'Safari' }],
-  asistente: { modelo: 'claude-opus-5-5', esfuerzo: 'low', minutosConversacion: 10 },
+  asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
 };
 
 const texto = (t: string): Bloque => ({ type: 'text', text: t, citations: null }) as Bloque;

@@ -15,7 +15,15 @@ export interface Escena {
 export type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface ConfigAsistente {
+  /**
+   * `auto` (por defecto): Groq si hay llave de Groq guardada; si no, Claude.
+   * Así basta con guardar una llave para que el chat funcione.
+   */
+  proveedor: 'auto' | 'groq' | 'claude';
+  /** Modelo de Claude (solo se usa con el proveedor `claude`). */
   modelo: string;
+  /** Modelos de Groq en orden de preferencia; vacío = los que trae el agente. */
+  modelosGroq: string[];
   /** `low` por defecto: es conversación por voz y la latencia se nota más que la profundidad. */
   esfuerzo: Esfuerzo;
   /** Minutos sin hablar tras los que se empieza una conversación nueva. */
@@ -52,7 +60,7 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
   origenes: ['https://juliangonzalez.lat', 'https://www.juliangonzalez.lat', 'http://localhost:5173'],
   escenas: [],
   apps: [],
-  asistente: { modelo: 'claude-opus-5-5', esfuerzo: 'low', minutosConversacion: 10 },
+  asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
 };
 
 const ESFUERZOS: Esfuerzo[] = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -86,6 +94,12 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
   revisarLista(c.apps, 'app', 'apps');
   const asistente = { ...PREDETERMINADA.asistente, ...(c.asistente as Partial<ConfigAsistente> | undefined) };
   if (typeof asistente.modelo !== 'string' || !asistente.modelo) throw new Error('config: "asistente.modelo" inválido');
+  if (!['auto', 'groq', 'claude'].includes(asistente.proveedor)) {
+    throw new Error('config: "asistente.proveedor" debe ser auto, groq o claude');
+  }
+  if (!Array.isArray(asistente.modelosGroq) || !asistente.modelosGroq.every((m) => typeof m === 'string' && m)) {
+    throw new Error('config: "asistente.modelosGroq" debe ser una lista de nombres de modelo');
+  }
   if (!ESFUERZOS.includes(asistente.esfuerzo)) throw new Error(`config: "asistente.esfuerzo" debe ser ${ESFUERZOS.join(', ')}`);
   if (typeof asistente.minutosConversacion !== 'number' || asistente.minutosConversacion <= 0) {
     throw new Error('config: "asistente.minutosConversacion" debe ser un número positivo');
@@ -121,7 +135,17 @@ export function cargarConfig(): Config {
  * perfil de `ant auth login`.
  */
 export function cargarClaveAnthropic(): string | undefined {
-  if (process.env.ANTHROPIC_API_KEY?.trim()) return process.env.ANTHROPIC_API_KEY.trim();
-  const ruta = join(RAIZ, '.anthropic-key');
+  return cargarClave('ANTHROPIC_API_KEY', '.anthropic-key');
+}
+
+/** Llave de Groq: GROQ_API_KEY o el archivo .groq-key junto al agente. */
+export function cargarClaveGroq(): string | undefined {
+  return cargarClave('GROQ_API_KEY', '.groq-key');
+}
+
+function cargarClave(variable: string, archivo: string): string | undefined {
+  const env = process.env[variable]?.trim();
+  if (env) return env;
+  const ruta = join(RAIZ, archivo);
   return existsSync(ruta) ? readFileSync(ruta, 'utf8').trim() || undefined : undefined;
 }
