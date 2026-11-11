@@ -10,7 +10,7 @@ import {
   type Emparejamiento,
   type EstadoConexion,
 } from './conexion';
-import { iniciarChat } from './chat';
+import { iniciarChat, puenteNativo } from './chat';
 import { bytes, duracion, esDeNoche, porcentaje } from './formato';
 
 /** Lo que manda el mac-agent en /estado y en los eventos `estado`. */
@@ -255,6 +255,20 @@ $<HTMLFormElement>('form-emparejar').addEventListener('submit', async (ev) => {
 $('boton-ajustes').addEventListener('click', () => {
   if (window.confirm('¿Desemparejar esta tablet de la Mac?')) desemparejar();
 });
+
+// En la app Android: botón de ajustes de voz, y la palabra clave despierta el modo noche.
+const nativo = puenteNativo();
+if (nativo) {
+  $('boton-voz').hidden = false;
+  $('boton-voz').addEventListener('click', () => nativo.ajustes());
+  window.addEventListener('asistente-nativo', (ev) => {
+    const tipo = (ev as CustomEvent<{ tipo: string }>).detail.tipo;
+    if (tipo === 'palabra' || tipo === 'escuchando') {
+      despiertoHasta = Date.now() + 60_000;
+      $('noche').hidden = true;
+    }
+  });
+}
 
 iniciarChat({
   emparejamiento: () => emparejamiento,

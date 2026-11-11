@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- La app es para una tablet con Android 6 (sin gesto predictivo de "atrás");
+         onBackPressed() es justo lo que se usa ahí, y evita depender de AndroidX. -->
+    <issue id="GestureBackNavigation" severity="ignore" />
+    <!-- App de un solo idioma (español): no hay traducciones que preparar. -->
+    <issue id="SetTextI18n" severity="ignore" />
+    <!-- El kiosco va en horizontal a propósito; el aviso es para Android 16+. -->
+    <issue id="DiscouragedApi" severity="ignore" />
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+</lint>

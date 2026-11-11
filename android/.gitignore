@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+# Firma de la app: nunca al repo
+*.jks
+*.keystore
+keystore.properties

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Temas del sistema (sin AndroidX): fondo oscuro desde el primer frame, sin destello blanco. -->
+    <style name="Tema" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:colorAccent">@color/acento</item>
+    </style>
+    <style name="Tema.Ajustes" parent="@android:style/Theme.Material">
+        <item name="android:colorAccent">@color/acento</item>
+        <item name="android:colorPrimary">@color/fondo</item>
+    </style>
+    <color name="fondo">#0b0d12</color>
+    <color name="acento">#5b9dff</color>
+</resources>

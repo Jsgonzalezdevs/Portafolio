@@ -20,6 +20,26 @@ interface Opciones {
   alNoAutorizado: () => void;
 }
 
+/** Puente que expone la app Android (android/) dentro de su WebView. */
+interface PuenteNativo {
+  version(): string;
+  estadoVoz(): string;
+  escuchar(): void;
+  hablar(texto: string, escucharDespues: boolean): void;
+  listo(): void;
+  ajustes(): void;
+}
+
+interface EventoNativo {
+  tipo: 'estado-voz' | 'vigilando' | 'palabra' | 'escuchando' | 'parcial' | 'texto' | 'sin-voz' | 'hablando' | 'error';
+  texto?: string;
+  mensaje?: string;
+  estado?: { palabraClave: boolean; palabra: string; error: string | null };
+}
+
+export const puenteNativo = (): PuenteNativo | undefined =>
+  (window as unknown as { AndroidAsistente?: PuenteNativo }).AndroidAsistente;
+
 const MAX_BURBUJAS = 30;
 
 type Reconocimiento = {
@@ -42,6 +62,8 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
   const mic = $('chat-mic') as HTMLButtonElement;
   let nueva = false;
   let enviando = false;
+  const nativo = puenteNativo();
+  const placeholderBase = campo.placeholder;
 
   function burbuja(clase: string, texto: string): HTMLLIElement {
     historial.querySelector('.chat__vacio')?.remove();
@@ -55,7 +77,8 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
     return li;
   }
 
-  function hablar(texto: string) {
+  function hablar(texto: string, escucharDespues = false) {
+    if (nativo) return nativo.hablar(texto, escucharDespues);
     const voz = window.speechSynthesis;
     if (!voz) return;
     voz.cancel();
@@ -69,7 +92,11 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
   async function enviar(texto: string, porVoz = false) {
     const e = emparejamiento();
     const limpio = texto.trim();
-    if (!e || !limpio || enviando) return;
+    if (!e || !limpio || enviando) {
+      // La tablet espera una respuesta hablada: si no la habrá, que vuelva a escuchar la palabra clave.
+      if (porVoz) nativo?.listo();
+      return;
+    }
     enviando = true;
     enviarBoton.disabled = true;
     confirmar.hidden = true;
@@ -87,7 +114,8 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
         pensando.appendChild(nota);
       }
       confirmar.hidden = !r.esperandoConfirmacion;
-      if (porVoz) hablar(r.respuesta);
+      // Si la IA pide confirmación por voz, la tablet escucha la respuesta sin esperar la palabra clave.
+      if (porVoz) hablar(r.respuesta, r.esperandoConfirmacion);
     } catch (err) {
       pensando.className = 'chat__ia fallo';
       if (err instanceof ErrorNoAutorizado) {
@@ -96,6 +124,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
       } else {
         pensando.textContent = err instanceof TypeError ? 'No pude contactar a la Mac.' : (err as Error).message;
       }
+      if (porVoz) hablar(pensando.textContent ?? 'Algo falló.');
     } finally {
       enviando = false;
       enviarBoton.disabled = false;
@@ -122,7 +151,53 @@ export function iniciarChat({ emparejamiento, alNoAutorizado }: Opciones) {
     burbuja('chat__vacio tenue', 'Charla nueva. ¿En qué te ayudo?');
   });
 
-  // ---------- Micrófono (solo donde el navegador lo soporte) ----------
+  // ---------- Voz nativa (app Android) ----------
+  if (nativo) {
+    mic.hidden = false;
+    mic.addEventListener('click', () => nativo.escuchar());
+    const pintarEstadoVoz = (estado: EventoNativo['estado']) => {
+      campo.placeholder = estado?.palabraClave ? `Di «${estado.palabra}» o escribe…` : placeholderBase;
+    };
+    try {
+      pintarEstadoVoz(JSON.parse(nativo.estadoVoz()));
+    } catch {
+      /* versión vieja de la app */
+    }
+    window.addEventListener('asistente-nativo', (ev) => {
+      const d = (ev as CustomEvent<EventoNativo>).detail;
+      switch (d.tipo) {
+        case 'estado-voz':
+          return pintarEstadoVoz(d.estado);
+        case 'palabra':
+        case 'escuchando':
+          mic.classList.add('escuchando');
+          campo.value = '';
+          campo.placeholder = 'Te escucho…';
+          return;
+        case 'parcial':
+          campo.value = d.texto ?? '';
+          return;
+        case 'texto':
+          mic.classList.remove('escuchando');
+          campo.value = '';
+          campo.placeholder = placeholderBase;
+          void enviar(d.texto ?? '', true);
+          return;
+        case 'sin-voz':
+        case 'vigilando':
+          mic.classList.remove('escuchando');
+          if (campo.placeholder === 'Te escucho…') campo.placeholder = placeholderBase;
+          return;
+        case 'error':
+          mic.classList.remove('escuchando');
+          burbuja('chat__ia fallo', d.mensaje ?? 'Error de voz');
+          return;
+      }
+    });
+    return { enviar };
+  }
+
+  // ---------- Micrófono del navegador (Chrome; el WebView de Android no lo trae) ----------
   const w = window as unknown as { SpeechRecognition?: new () => Reconocimiento; webkitSpeechRecognition?: new () => Reconocimiento };
   const Clase = w.SpeechRecognition ?? w.webkitSpeechRecognition;
   if (Clase) {
