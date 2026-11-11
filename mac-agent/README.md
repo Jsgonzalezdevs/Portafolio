@@ -1,0 +1,181 @@
+# mac-agent
+
+Agente local que expone la Mac a la tablet del asistente (`juliangonzalez.lat/app`).
+Es el "cerebro" de la arquitectura: la tablet (Lenovo YT3-850F, Android 6, 1 GB)
+solo muestra el panel y, más adelante, escucha la palabra clave; todo lo que toca
+la Mac pasa por aquí.
+
+- **Node 24+ ejecuta el TypeScript directamente.** Única dependencia: el SDK
+  oficial de Claude (`@anthropic-ai/sdk`) para el chat.
+- **Solo escucha en 127.0.0.1**: se llega a él a través de un túnel HTTPS.
+- **Lista blanca de acciones**: no existe una orden de shell libre; los binarios
+  se lanzan con `execFile`, sin pasar por un intérprete.
+
+## API
+
+Todas las rutas, salvo `/salud`, piden `Authorization: Bearer <token>`.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/salud` | `{ ok: true }` (sin token) |
+| GET | `/estado` | CPU, RAM, disco, batería, volumen, uptime |
+| GET | `/catalogo` | Acciones, escenas y apps configuradas |
+| GET | `/eventos` | Flujo SSE: evento `estado` cada 3 s |
+| POST | `/acciones/:id` | Ejecuta una acción con cuerpo JSON |
+| POST | `/chat` | `{ texto, nueva? }` → `{ respuesta, acciones, esperandoConfirmacion }` |
+
+Acciones: `volumen.fijar {nivel}`, `volumen.silenciar {silenciar}`,
+`media.playpause`, `media.siguiente`, `media.anterior`, `pantalla.apagar`,
+`app.abrir {id}`, `escena.ejecutar {id}`.
+
+Diez tokens inválidos en un minuto bloquean esa IP durante un minuto.
+
+## Chat con Claude (`/chat`)
+
+Claude recibe las acciones de arriba como herramientas, más `leer_estado_mac`.
+Solo puede hacer lo que está en la lista blanca. Las respuestas están pensadas
+para leerse en voz alta: una o dos frases, sin formato.
+
+- **Modelo y esfuerzo**: `asistente.modelo` (por defecto `claude-opus-5-5`) y
+  `asistente.esfuerzo` (por defecto `low`) en `config.json`. Por voz, la
+  latencia pesa más que la profundidad. Sube a `medium` si notas respuestas
+  flojas.
+- **Respaldo ante rechazos**: si el modelo declina una petición por política,
+  la API la reintenta sola con su respaldo por defecto
+  (`fallbacks: "default"`).
+- **Memoria de la charla**: dura `asistente.minutosConversacion` (10 por
+  defecto) sin actividad, o hasta pulsar «Nueva charla». Vive en memoria: si el
+  agente se reinicia, se pierde. Si Claude falla a mitad de una respuesta, la
+  charla también se descarta, para no dejar un historial roto.
+- **Confirmaciones**: una escena con `"confirmar": true` (abrir una puerta, por
+  ejemplo) no se ejecuta la primera vez que Claude la pide. El agente la
+  bloquea, Claude pregunta y solo se ejecuta si se vuelve a pedir después de
+  que tú respondas. El botón de la escena en el panel no pregunta: tocarlo ya
+  es confirmar.
+- **Fecha y hora**: van en cada mensaje, no en las instrucciones fijas, para
+  que la caché del prompt siga sirviendo.
+
+### Clave de la API
+
+El agente corre bajo launchd y no ve las variables de tu terminal. Guarda la
+clave en un archivo junto al agente (cópiala primero al portapapeles):
+
+```bash
+pbpaste > ~/Library/Application\ Support/mac-agent/.anthropic-key && chmod 600 ~/Library/Application\ Support/mac-agent/.anthropic-key
+```
+
+Después reinicia el agente:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/lat.juliangonzalez.mac-agent
+```
+
+También sirven `ANTHROPIC_API_KEY` o un perfil de `ant auth login`. Sin
+ninguno, el chat responde «Falta la clave de Claude» y el resto del panel sigue
+funcionando.
+
+## Instalar en la Mac
+
+```bash
+zsh mac-agent/scripts/instalar.sh
+```
+
+1. Copia el agente a `~/Library/Application Support/mac-agent` e instala el
+   SDK ahí. Va fuera de `~/Documents` porque macOS bloquea esa carpeta a los
+   procesos de launchd.
+2. Lo registra como LaunchAgent: arranca al iniciar sesión y se reinicia si cae.
+3. Genera el token en `~/Library/Application Support/mac-agent/.token`.
+
+Para actualizar después de cambiar el código, vuelve a ejecutar el mismo script.
+`config.json`, `.token` y `.anthropic-key` no se tocan.
+
+**Permisos**: la primera vez que pulses reproducir/pausar, macOS pedirá permiso
+para que `node` controle Spotify o Música. Acéptalo en la Mac.
+
+**Que la Mac no se duerma enchufada** (si no, el asistente se queda sin cerebro):
+
+```bash
+sudo pmset -c sleep 0 displaysleep 10
+```
+
+### Escenas de domótica
+
+Cada escena es un Atajo de macOS. Para luces de Apple Home, crea en la app
+Atajos un atajo «Encender luces sala» con la acción *Controlar mi casa* y añádelo
+a `config.json`:
+
+```json
+{ "id": "luces-sala", "nombre": "Luces sala", "atajo": "Encender luces sala" }
+```
+
+Después reinicia el agente:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/lat.juliangonzalez.mac-agent
+```
+
+## Publicarlo con HTTPS (túnel)
+
+`juliangonzalez.lat/app` se sirve por HTTPS, y el navegador bloquea las llamadas
+de esa página a `http://192.168.x.x`. Por eso el agente se publica con un túnel.
+Hay dos caminos:
+
+**A · Tailscale Funnel** (no exige mover el DNS):
+
+```bash
+tailscale funnel --bg 8787
+```
+
+Usa la URL `https://<tu-mac>.<tailnet>.ts.net` como «Agente» en la tablet. La
+tablet no necesita tener Tailscale.
+
+**B · Cloudflare Tunnel** con `agente.juliangonzalez.lat` (exige que el DNS del
+dominio esté en Cloudflare):
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create mac-agent
+cloudflared tunnel route dns mac-agent agente.juliangonzalez.lat
+```
+
+Crea `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: mac-agent
+credentials-file: /Users/<usuario>/.cloudflared/<id>.json
+ingress:
+  - hostname: agente.juliangonzalez.lat
+    service: http://127.0.0.1:8787
+  - service: http_status:404
+```
+
+Y déjalo como servicio:
+
+```bash
+sudo cloudflared service install
+```
+
+Si usas otro dominio u origen, añádelo a `origenes` en `config.json` (CORS).
+
+## Emparejar la tablet
+
+Abre `https://juliangonzalez.lat/app` en la tablet y pega la URL del agente y el
+token. También puedes enviarte este enlace; el fragmento `#` nunca llega a
+ningún servidor y se borra de la barra al cargar:
+
+```
+https://juliangonzalez.lat/app#agente=<url-del-agente>&token=<token>
+```
+
+Para revocar una tablet, borra el `.token` y reinicia el agente: se genera uno
+nuevo.
+
+## Desarrollo
+
+```bash
+cd mac-agent
+npm install     # SDK de Claude
+npm test        # node:test (Claude simulado, no gasta API)
+npm run check   # tsc
+AGENT_CONFIG=/ruta/config.json AGENT_TOKEN=<32+ caracteres> npm start
+```

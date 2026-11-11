@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0b0d12" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Asistente</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <!-- Emparejamiento: solo la primera vez o si el token deja de valer -->
+    <section id="pantalla-emparejar" class="emparejar" hidden>
+      <form id="form-emparejar" class="tarjeta emparejar__caja" autocomplete="off">
+        <h1>Conectar con la Mac</h1>
+        <p class="tenue">Pega la dirección del agente y el token que imprime <code>mac-agent</code>.</p>
+        <label>Agente
+          <input id="campo-agente" type="url" inputmode="url" value="https://agente.juliangonzalez.lat" required />
+        </label>
+        <label>Token
+          <input id="campo-token" type="password" required minlength="32" />
+        </label>
+        <p id="error-emparejar" class="error" role="alert"></p>
+        <button class="boton boton--primario" type="submit">Conectar</button>
+      </form>
+    </section>
+
+    <main id="pantalla-panel" class="panel" hidden>
+      <header class="panel__reloj">
+        <div id="hora" class="hora">--:--</div>
+        <div id="fecha" class="fecha"></div>
+        <div class="barra-estado">
+          <span id="conexion" class="pastilla" data-estado="conectando">Conectando…</span>
+          <button id="boton-noche" class="boton boton--icono" type="button" aria-label="Modo noche"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12.3 2a10 10 0 1 0 9.7 12.6A8 8 0 0 1 12.3 2z"/></svg></button>
+          <button id="boton-ajustes" class="boton boton--icono" type="button" aria-label="Desemparejar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
+        </div>
+      </header>
+
+      <section id="tarjeta-chat" class="tarjeta chat" aria-labelledby="t-chat" hidden>
+        <div class="chat__cabecera">
+          <h2 id="t-chat">Asistente</h2>
+          <button id="chat-nueva" class="boton boton--chico" type="button">Nueva charla</button>
+        </div>
+        <ol id="chat-historial" class="chat__historial" aria-live="polite">
+          <li class="chat__vacio tenue">Pregúntame algo o pídeme que controle la Mac.</li>
+        </ol>
+        <div id="chat-confirmar" class="fila" hidden>
+          <button class="boton boton--primario" type="button" data-respuesta="Sí, hazlo.">Sí</button>
+          <button class="boton" type="button" data-respuesta="No, cancela.">No</button>
+        </div>
+        <form id="chat-form" class="chat__form" autocomplete="off">
+          <button id="chat-mic" class="boton boton--icono" type="button" aria-label="Hablar" hidden><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg></button>
+          <input id="chat-texto" type="text" maxlength="2000" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente" />
+          <button id="chat-enviar" class="boton boton--primario boton--icono" type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5V10l12 2-12 2z"/></svg></button>
+        </form>
+      </section>
+
+      <section id="tarjeta-mac" class="tarjeta" aria-labelledby="t-mac">
+        <h2 id="t-mac"><span id="mac-nombre">Mac</span> <small id="mac-sistema" class="tenue"></small></h2>
+        <div class="medidor"><span>CPU</span><div class="medidor__barra"><i id="cpu-barra"></i></div><b id="cpu-valor">–</b></div>
+        <div class="medidor"><span>RAM</span><div class="medidor__barra"><i id="ram-barra"></i></div><b id="ram-valor">–</b></div>
+        <div class="medidor"><span>Disco</span><div class="medidor__barra"><i id="disco-barra"></i></div><b id="disco-valor">–</b></div>
+        <dl class="datos">
+          <div><dt>Batería</dt><dd id="bateria">–</dd></div>
+          <div><dt>Encendida</dt><dd id="uptime">–</dd></div>
+          <div><dt>Carga</dt><dd id="carga">–</dd></div>
+        </dl>
+      </section>
+
+      <section id="tarjeta-control" class="tarjeta" aria-labelledby="t-control">
+        <h2 id="t-control">Control</h2>
+        <div class="volumen">
+          <button id="boton-mute" class="boton boton--icono" type="button" aria-label="Silenciar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-vol"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-mute" hidden><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm18.7 1.4-1.4-1.4L18 11.3 15.7 9l-1.4 1.4 2.3 2.3-2.3 2.3 1.4 1.4 2.3-2.3 2.3 2.3 1.4-1.4-2.3-2.3z"/></svg></button>
+          <input id="volumen" type="range" min="0" max="100" step="5" aria-label="Volumen" />
+          <b id="volumen-valor">–</b>
+        </div>
+        <div class="fila">
+          <button class="boton" type="button" data-accion="media.anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+          <button class="boton boton--primario" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>
+          <button class="boton" type="button" data-accion="media.siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
+          <button class="boton" type="button" data-accion="pantalla.apagar">Apagar pantalla</button>
+        </div>
+      </section>
+
+      <section id="tarjeta-escenas" class="tarjeta" aria-labelledby="t-escenas">
+        <h2 id="t-escenas">Casa</h2>
+        <div id="escenas" class="rejilla"><p class="tenue">Sin escenas. Agrégalas en mac-agent/config.json.</p></div>
+      </section>
+
+      <section id="tarjeta-apps" class="tarjeta" aria-labelledby="t-apps">
+        <h2 id="t-apps">Apps</h2>
+        <div id="apps" class="rejilla"><p class="tenue">Sin apps permitidas.</p></div>
+      </section>
+    </main>
+
+    <div id="noche" class="noche" hidden><div id="noche-hora" class="noche__hora"></div></div>
+    <div id="aviso" class="aviso" role="status" hidden></div>
+
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

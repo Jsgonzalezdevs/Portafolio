@@ -1,0 +1,6 @@
+# Secretos y configuración local de esta Mac
+.token
+config.json
+logs/
+.anthropic-key
+node_modules/

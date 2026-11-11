@@ -1,0 +1,175 @@
+/*
+ * CSS escrito a mano para Chrome/WebView 106 (Android 6, techo definitivo):
+ * sin oklch(), color-mix(), anidación, dvh ni backdrop-filter. Tampoco
+ * animaciones continuas: la tablet tiene un Snapdragon 210 y 1 GB de RAM.
+ */
+:root {
+  --fondo: #0b0d12;
+  --tarjeta: #151922;
+  --borde: #232a36;
+  --texto: #e8ecf3;
+  --tenue: #8b95a7;
+  --acento: #5b9dff;
+  --ok: #3ecf8e;
+  --alerta: #f5b544;
+  --peligro: #ff6b6b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 16px/1.4 system-ui, -apple-system, 'Roboto', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+[hidden] { display: none !important; }
+
+h1, h2 { margin: 0 0 12px; font-weight: 600; }
+h2 { font-size: 18px; }
+small { font-size: 13px; font-weight: 400; }
+code { background: var(--borde); padding: 1px 6px; border-radius: 4px; }
+.tenue { color: var(--tenue); }
+.error { color: var(--peligro); min-height: 1.4em; margin: 0; }
+
+.tarjeta {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+/* Panel: pensado para 1280×800 en horizontal; en vertical pasa a una columna. */
+.panel {
+  height: 100vh;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'reloj mac control'
+    'chat escenas apps';
+}
+.panel__reloj { grid-area: reloj; display: flex; flex-direction: column; justify-content: center; padding: 0 12px; }
+#tarjeta-mac { grid-area: mac; }
+#tarjeta-control { grid-area: control; }
+#tarjeta-escenas { grid-area: escenas; overflow-y: auto; }
+#tarjeta-apps { grid-area: apps; overflow-y: auto; }
+#tarjeta-chat { grid-area: chat; }
+/* Sin chat (agente sin IA), el reloj vuelve a ocupar toda la columna. */
+.panel--sin-chat { grid-template-areas: 'reloj mac control' 'reloj escenas apps'; }
+
+@media (orientation: portrait), (max-width: 900px) {
+  html, body { overflow: auto; }
+  .panel {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas: 'reloj' 'chat' 'mac' 'control' 'escenas' 'apps';
+  }
+  .panel__reloj { padding: 12px 4px; }
+  .panel--sin-chat { grid-template-areas: 'reloj' 'mac' 'control' 'escenas' 'apps'; }
+  .chat { height: 60vh; }
+}
+
+.hora { font-size: 96px; font-weight: 200; line-height: 1; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
+.fecha { font-size: 24px; color: var(--tenue); margin-top: 8px; }
+.barra-estado { display: flex; align-items: center; gap: 10px; margin-top: 28px; }
+
+.pastilla { padding: 6px 12px; border-radius: 999px; font-size: 14px; background: var(--borde); color: var(--tenue); }
+.pastilla[data-estado='en-linea'] { background: rgba(62, 207, 142, 0.15); color: var(--ok); }
+.pastilla[data-estado='sin-conexion'] { background: rgba(255, 107, 107, 0.15); color: var(--peligro); }
+
+.boton {
+  min-height: 56px;
+  min-width: 56px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid var(--borde);
+  background: #1d2330;
+  color: var(--texto);
+  font: inherit;
+  font-size: 18px;
+}
+.boton:active { background: #283044; }
+.boton:disabled { opacity: 0.5; }
+.boton--primario { background: var(--acento); border-color: var(--acento); color: #06101f; font-weight: 600; }
+.boton--primario:active { background: #4a86e0; }
+.boton--icono { padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.boton svg { display: block; margin: 0 auto; }
+.datos dd { white-space: nowrap; }
+
+.fila { display: flex; flex-wrap: wrap; gap: 10px; }
+.rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.rejilla .boton { width: 100%; font-size: 16px; }
+
+.medidor { display: grid; grid-template-columns: 52px 1fr 64px; align-items: center; gap: 10px; margin: 10px 0; }
+.medidor span { color: var(--tenue); font-size: 14px; }
+.medidor b { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.medidor__barra { height: 10px; border-radius: 5px; background: var(--borde); overflow: hidden; }
+.medidor__barra i { display: block; height: 100%; width: 0; background: var(--acento); transition: width 0.4s; }
+.medidor__barra i.alto { background: var(--alerta); }
+.medidor__barra i.critico { background: var(--peligro); }
+
+.datos { display: flex; gap: 12px; margin: 14px 0 0; }
+.datos div { flex: 1; }
+.datos dt { color: var(--tenue); font-size: 13px; }
+.datos dd { margin: 2px 0 0; font-size: 17px; }
+
+.volumen { display: grid; grid-template-columns: 56px 1fr 48px; align-items: center; gap: 12px; margin-bottom: 14px; }
+.volumen b { text-align: right; font-variant-numeric: tabular-nums; }
+input[type='range'] { width: 100%; height: 40px; accent-color: var(--acento); }
+
+/* Emparejamiento */
+.emparejar { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.emparejar__caja { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
+.emparejar__caja p { margin: 0; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--tenue); }
+input[type='url'], input[type='password'] {
+  font: inherit; font-size: 17px; color: var(--texto);
+  background: var(--fondo); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 12px; -webkit-user-select: text; user-select: text;
+}
+
+/* Modo noche: negro casi total para no iluminar el cuarto ni gastar pantalla. */
+.noche { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.noche__hora { font-size: 160px; font-weight: 200; color: #3a2a24; font-variant-numeric: tabular-nums; }
+
+.aviso {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  background: #262d3b; border: 1px solid var(--borde); border-radius: 12px;
+  padding: 12px 18px; z-index: 20;
+}
+.aviso.error-aviso { border-color: var(--peligro); color: #ffd0d0; }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; min-height: 0; }
+.chat__cabecera { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chat__cabecera h2 { margin: 0; }
+.boton--chico { min-height: 40px; padding: 0 12px; font-size: 14px; }
+.chat__historial { list-style: none; margin: 10px 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; -webkit-user-select: text; user-select: text; }
+.chat__historial li { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 17px; line-height: 1.35; }
+.chat__yo { align-self: flex-end; background: #24426e; border-bottom-right-radius: 4px; }
+.chat__ia { align-self: flex-start; background: #1d2330; border: 1px solid var(--borde); border-bottom-left-radius: 4px; }
+.chat__ia.pensando { color: var(--tenue); }
+.chat__ia.fallo { border-color: var(--peligro); color: #ffd0d0; }
+.chat__ia small { display: block; margin-top: 4px; color: var(--tenue); }
+.chat__vacio { align-self: center; text-align: center; }
+#chat-confirmar { margin-bottom: 10px; }
+.chat__form { display: flex; gap: 8px; }
+.chat__form input {
+  flex: 1; min-width: 0; font: inherit; font-size: 17px; color: var(--texto);
+  background: var(--fondo); border: 1px solid var(--borde); border-radius: 14px; padding: 0 14px;
+  -webkit-user-select: text; user-select: text;
+}
+#chat-mic.escuchando { background: var(--peligro); border-color: var(--peligro); color: #fff; }
