@@ -59,7 +59,8 @@ test('si el primer modelo falla o se queda sin cupo, usa el siguiente; 401 = lla
   const pedir = (async (_url: unknown, init?: RequestInit) => {
     const cuerpo = JSON.parse(String(init?.body));
     modelos.push(cuerpo.model);
-    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer gsk_prueba');
+    const cabeceras = (init?.headers ?? {}) as Record<string, string>;
+    assert.equal(cabeceras.Authorization, 'Bearer gsk_prueba');
     return cuerpo.model === 'uno'
       ? json(429, { error: { message: 'rate limit' } })
       : json(200, { choices: [{ finish_reason: 'stop', message: { content: 'Hola' } }] });
