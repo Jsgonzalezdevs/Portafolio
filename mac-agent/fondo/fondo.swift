@@ -244,44 +244,58 @@ func guardarJPEG(_ imagen: CGImage, en url: URL, calidad: Double) -> Bool {
 
 // ---------- Principal ----------
 
-let argumentos = Array(CommandLine.arguments.dropFirst())
-guard let primera = argumentos.first else { fallar("Uso: fondo <carpeta de salida> [ancho máximo]") }
-let carpeta = URL(fileURLWithPath: primera, isDirectory: true)
-let anchoMaximo = argumentos.count > 1 ? max(320, min(3840, Int(argumentos[1]) ?? 1600)) : 1600
+/// Cuánto esperar antes de rendirse. La primera vez macOS pregunta si «Fondo del
+/// asistente» puede acceder a datos de otras apps (la captura del fondo está en la
+/// carpeta de WallpaperAgent) y el sistema deja la lectura bloqueada hasta que
+/// alguien pulsa «Permitir»; sin límite, el proceso quedaría colgado para siempre.
+let esperaMaxima: Double = 75
 
-do { try fm.createDirectory(at: carpeta, withIntermediateDirectories: true) } catch {
-    fallar("No se pudo crear la carpeta de salida: \(error.localizedDescription)")
+func trabajar() {
+
+  let argumentos = Array(CommandLine.arguments.dropFirst())
+  guard let primera = argumentos.first else { fallar("Uso: fondo <carpeta de salida> [ancho máximo]") }
+  let carpeta = URL(fileURLWithPath: primera, isDirectory: true)
+  let anchoMaximo = argumentos.count > 1 ? max(320, min(3840, Int(argumentos[1]) ?? 1600)) : 1600
+
+  do { try fm.createDirectory(at: carpeta, withIntermediateDirectories: true) } catch {
+      fallar("No se pudo crear la carpeta de salida: \(error.localizedDescription)")
+  }
+
+  let fuente = fuenteActual()
+  let atributos = try? fm.attributesOfItem(atPath: fuente.url.path)
+  let huella = [
+      fuente.origen,
+      fuente.url.path,
+      String((atributos?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0),
+      String((atributos?[.size] as? NSNumber)?.int64Value ?? 0),
+      String(anchoMaximo),
+      "v1",
+  ].joined(separator: "|")
+  let firma = SHA256.hash(data: Data(huella.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+
+  let archivoFirma = carpeta.appendingPathComponent("firma.txt")
+  let nitido = carpeta.appendingPathComponent("fondo.jpg")
+  let borroso = carpeta.appendingPathComponent("vidrio.jpg")
+
+  if (try? String(contentsOf: archivoFirma, encoding: .utf8)) == firma,
+     fm.fileExists(atPath: nitido.path), fm.fileExists(atPath: borroso.path) {
+      salir(["firma": firma, "origen": fuente.origen, "cambiado": false])
+  }
+
+  guard let original = cargar(fuente, maximo: anchoMaximo), let imagen = enSRGB(original, ancho: anchoMaximo) else {
+      fallar("No se pudo leer la imagen del fondo (\(fuente.origen))")
+  }
+  guard guardarJPEG(imagen, en: nitido, calidad: 0.82) else { fallar("No se pudo escribir fondo.jpg") }
+  guard let material = vidrio(imagen), guardarJPEG(material, en: borroso, calidad: 0.7) else {
+      fallar("No se pudo escribir vidrio.jpg")
+  }
+  do { try firma.write(to: archivoFirma, atomically: true, encoding: .utf8) } catch {
+      fallar("No se pudo escribir firma.txt")
+  }
+  salir(["firma": firma, "origen": fuente.origen, "cambiado": true, "ancho": imagen.width, "alto": imagen.height])
 }
 
-let fuente = fuenteActual()
-let atributos = try? fm.attributesOfItem(atPath: fuente.url.path)
-let huella = [
-    fuente.origen,
-    fuente.url.path,
-    String((atributos?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0),
-    String((atributos?[.size] as? NSNumber)?.int64Value ?? 0),
-    String(anchoMaximo),
-    "v1",
-].joined(separator: "|")
-let firma = SHA256.hash(data: Data(huella.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
-
-let archivoFirma = carpeta.appendingPathComponent("firma.txt")
-let nitido = carpeta.appendingPathComponent("fondo.jpg")
-let borroso = carpeta.appendingPathComponent("vidrio.jpg")
-
-if (try? String(contentsOf: archivoFirma, encoding: .utf8)) == firma,
-   fm.fileExists(atPath: nitido.path), fm.fileExists(atPath: borroso.path) {
-    salir(["firma": firma, "origen": fuente.origen, "cambiado": false])
-}
-
-guard let original = cargar(fuente, maximo: anchoMaximo), let imagen = enSRGB(original, ancho: anchoMaximo) else {
-    fallar("No se pudo leer la imagen del fondo (\(fuente.origen))")
-}
-guard guardarJPEG(imagen, en: nitido, calidad: 0.82) else { fallar("No se pudo escribir fondo.jpg") }
-guard let material = vidrio(imagen), guardarJPEG(material, en: borroso, calidad: 0.7) else {
-    fallar("No se pudo escribir vidrio.jpg")
-}
-do { try firma.write(to: archivoFirma, atomically: true, encoding: .utf8) } catch {
-    fallar("No se pudo escribir firma.txt")
-}
-salir(["firma": firma, "origen": fuente.origen, "cambiado": true, "ancho": imagen.width, "alto": imagen.height])
+DispatchQueue.global(qos: .utility).async { trabajar() }
+// El hilo principal solo vigila: trabajar() termina el proceso con salir(...).
+_ = DispatchSemaphore(value: 0).wait(timeout: .now() + esperaMaxima)
+fallar("macOS no respondió a tiempo. Si apareció un aviso para que «Fondo del asistente» acceda a datos de otras apps, pulsa Permitir y vuelve a intentarlo.")

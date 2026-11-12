@@ -19,6 +19,8 @@ export const NOMBRE_APP_FONDO = 'Fondo del asistente.app';
 
 export type Variante = 'fondo' | 'vidrio';
 
+const ESPERA_MINI_APP_MS = 90_000;
+
 export interface ImagenFondo {
   datos: Buffer;
   firma: string;
@@ -67,12 +69,17 @@ export class Fondo {
   revisar(): Promise<void> {
     if (!this.enCurso) {
       this.revisadoEn = this.ahora();
-      this.enCurso = lanzarMiniApp<Respuesta>(this.run, this.app, [this.carpeta, '1600'], 30_000)
+      // La mini app se rinde sola a los 75 s (macOS puede estar esperando un permiso); aquí 15 s más de margen.
+      this.enCurso = lanzarMiniApp<Respuesta>(this.run, this.app, [this.carpeta, '1600'], ESPERA_MINI_APP_MS)
         .then((r) => {
           if (r.cambiado || r.firma !== this.firmaActual) this.log(`fondo: ${r.origen} (${r.firma})`);
           this.firmaActual = r.firma;
         })
-        .catch((e: Error) => this.log(`fondo: ${e.message}`))
+        .catch(async (e: Error) => {
+          this.log(`fondo: ${e.message}`);
+          // Si `open` se rindió antes que la mini app, no se deja un proceso colgado por cada intento.
+          await this.run('pkill', ['-f', `${this.app}/Contents/MacOS`]).catch(() => undefined);
+        })
         .finally(() => {
           this.enCurso = null;
         });

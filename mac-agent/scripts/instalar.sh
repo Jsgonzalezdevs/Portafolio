@@ -38,6 +38,18 @@ fi
 # Sin ella el panel usa la imagen genérica del sistema y no hay efecto de vidrio.
 if ! zsh "$ORIGEN/fondo/construir.sh" "$DESTINO"; then
   echo "Aviso: sin fondo real (no se pudo compilar el ayudante). El resto funciona." >&2
+elif [[ ! -f "$DESTINO/fondo-actual/fondo.jpg" ]]; then
+  # Primera vez: macOS pregunta si «Fondo del asistente» puede acceder a datos de otras
+  # apps. Se lanza aquí, con el instalador delante, para que el aviso no pase de largo.
+  echo "Fondo de pantalla: si macOS muestra un aviso de «Fondo del asistente», pulsa PERMITIR (tienes 75 s)…"
+  SALIDA_FONDO=$(mktemp)
+  open -n -W -g --stdout "$SALIDA_FONDO" --stderr "$SALIDA_FONDO" "$DESTINO/Fondo del asistente.app" --args "$DESTINO/fondo-actual" 1600 || true
+  if [[ -f "$DESTINO/fondo-actual/fondo.jpg" ]]; then
+    echo "Fondo de pantalla listo."
+  else
+    echo "Aviso: no se pudo leer el fondo ($(tr -d '\n' < "$SALIDA_FONDO" | cut -c1-160)). Vuelve a ejecutar este script y pulsa Permitir." >&2
+  fi
+  rm -f "$SALIDA_FONDO"
 fi
 
 if [[ ! -f "$DESTINO/config.json" ]]; then

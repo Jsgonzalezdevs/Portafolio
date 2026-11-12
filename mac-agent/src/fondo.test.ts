@@ -56,6 +56,20 @@ test('pasados 5 minutos comprueba de nuevo; si el fondo cambió, cambia la firma
   assert.deepEqual(t.registro, ['fondo: captura (f1)', 'fondo: captura (f2)']);
 });
 
+test('si la mini app falla, mata los procesos que hayan quedado colgados', async () => {
+  const carpeta = await mkdtemp(join(tmpdir(), 'fondo-'));
+  const llamadas: string[][] = [];
+  const run: Ejecutor = async (bin, args) => {
+    llamadas.push([bin, ...args]);
+    if (bin === 'open') throw new Error('Command failed: open …');
+    return '';
+  };
+  const fondo = new Fondo({ app: '/x/Fondo del asistente.app', carpeta, run, log: () => {} });
+  await fondo.revisar();
+  assert.deepEqual(llamadas.at(-1), ['pkill', '-f', '/x/Fondo del asistente.app/Contents/MacOS']);
+  assert.equal(fondo.firma, null);
+});
+
 test('si la mini app falla, se conserva el fondo anterior; sin ninguno, 404', async () => {
   const sinNada = await montar([() => ({ error: 'No se pudo determinar el fondo de pantalla' })]);
   assert.equal(await sinNada.fondo.imagen('fondo'), null);
