@@ -49,6 +49,11 @@ export interface Config {
   escenas: Escena[];
   apps: AppPermitida[];
   asistente: ConfigAsistente;
+  /**
+   * Dónde publicar la dirección del túnel (cifrada con el token) para que el
+   * panel la encuentre solo. Lo rellena el instalador con el remoto del repo.
+   */
+  publicar?: { remoto: string; rama: string };
   token: string;
 }
 
@@ -104,7 +109,16 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
   if (typeof asistente.minutosConversacion !== 'number' || asistente.minutosConversacion <= 0) {
     throw new Error('config: "asistente.minutosConversacion" debe ser un número positivo');
   }
-  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, asistente };
+  const publicar = (crudo as { publicar?: unknown } | null)?.publicar as Config['publicar'];
+  if (publicar !== undefined) {
+    if (typeof publicar?.remoto !== 'string' || !/^https:\/\//.test(publicar.remoto)) {
+      throw new Error('config: "publicar.remoto" debe ser una URL https de git');
+    }
+    if (typeof publicar.rama !== 'string' || !/^[a-z0-9-]+$/.test(publicar.rama) || publicar.rama === 'main') {
+      throw new Error('config: "publicar.rama" debe ser una rama propia (no main)');
+    }
+  }
+  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, asistente, publicar };
 }
 
 /** Token del dispositivo: AGENT_TOKEN si existe; si no, uno generado y guardado en .token (permisos 600). */

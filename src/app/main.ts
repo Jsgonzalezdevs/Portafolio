@@ -14,6 +14,21 @@ import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
 import { bytes, duracion, esDeNoche, porcentaje } from './formato';
 
+interface Reproductor {
+  app: 'spotify' | 'music';
+  estado: 'playing' | 'paused' | 'stopped';
+  cancion: string;
+  artista: string;
+  caratula: string | null;
+}
+
+interface Clima {
+  ciudad: string;
+  tempC: number;
+  condicion: string;
+  icono: string;
+}
+
 /** Lo que manda el mac-agent en /estado y en los eventos `estado`. */
 interface EstadoMac {
   nombre: string;
@@ -26,6 +41,8 @@ interface EstadoMac {
   disco: { libreBytes: number; totalBytes: number } | null;
   bateria: { porcentaje: number; cargando: boolean; conectada: boolean } | null;
   volumen: { nivel: number; silenciado: boolean } | null;
+  reproductor?: Reproductor | null;
+  clima?: Clima | null;
   /** Recordatorios que acaban de vencer. */
   avisos?: Aviso[];
 }
@@ -127,6 +144,50 @@ function pintarEstado(e: EstadoMac) {
     : 'Corriente';
   $('uptime').textContent = duracion(e.uptimeSeg);
   $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
+
+  // Clima junto al reloj
+  if (e.clima) {
+    $('clima').hidden = false;
+    $('clima-icono').textContent = e.clima.icono;
+    $('clima-temp').textContent = `${e.clima.tempC > 0 ? '+' : ''}${e.clima.tempC}°`;
+    $('clima-ciudad').textContent = e.clima.ciudad;
+    $('clima').title = e.clima.condicion;
+  } else {
+    $('clima').hidden = true;
+  }
+
+  // Reproductor multimedia en la tarjeta de control
+  const rep = e.reproductor;
+  const activo = $('media-activo');
+  const reposo = $('media-reposo');
+  const badge = $('media-badge');
+  const iconoPlayPause = $('icono-playpause');
+  if (rep && (rep.estado === 'playing' || rep.estado === 'paused')) {
+    activo.hidden = false;
+    reposo.hidden = true;
+    badge.hidden = false;
+    badge.textContent = rep.app === 'spotify' ? 'Spotify' : 'Música';
+    $('media-titulo').textContent = rep.cancion;
+    $('media-artista').textContent = rep.artista;
+    const caratula = $<HTMLImageElement>('media-caratula');
+    if (rep.caratula) {
+      if (caratula.src !== rep.caratula) caratula.src = rep.caratula;
+      caratula.hidden = false;
+    } else {
+      caratula.hidden = true;
+    }
+    iconoPlayPause.innerHTML =
+      rep.estado === 'playing'
+        ? '<path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'
+        : '<path fill="currentColor" d="M8 5v14l11-7z"/>';
+    $('boton-playpause').setAttribute('aria-label', rep.estado === 'playing' ? 'Pausar' : 'Reproducir');
+  } else {
+    activo.hidden = true;
+    reposo.hidden = false;
+    badge.hidden = true;
+    iconoPlayPause.innerHTML = '<path fill="currentColor" d="M8 5v14l11-7z"/>';
+    $('boton-playpause').setAttribute('aria-label', 'Reproducir o pausar');
+  }
 
   agendaUI.mostrarAvisos(e.avisos);
   ultimoVolumen = e.volumen;
@@ -258,8 +319,45 @@ $<HTMLFormElement>('form-emparejar').addEventListener('submit', async (ev) => {
   }
 });
 
-$('boton-ajustes').addEventListener('click', () => {
-  if (window.confirm('¿Desemparejar esta tablet de la Mac?')) desemparejar();
+// Desemparejar: protegido con pulsación larga de 2 segundos + modal de confirmación
+let temporizadorAjustes: number | undefined;
+const botonAjustes = $('boton-ajustes');
+const modalDesemparejar = $('modal-desemparejar');
+
+const cancelarPresionAjustes = () => {
+  if (temporizadorAjustes !== undefined) {
+    clearTimeout(temporizadorAjustes);
+    temporizadorAjustes = undefined;
+    botonAjustes.classList.remove('presionado');
+  }
+};
+
+botonAjustes.addEventListener('pointerdown', () => {
+  cancelarPresionAjustes();
+  botonAjustes.classList.add('presionado');
+  temporizadorAjustes = window.setTimeout(() => {
+    temporizadorAjustes = undefined;
+    botonAjustes.classList.remove('presionado');
+    modalDesemparejar.hidden = false;
+  }, 2000);
+});
+
+botonAjustes.addEventListener('pointerup', () => {
+  if (temporizadorAjustes !== undefined) {
+    cancelarPresionAjustes();
+    avisar('Mantén presionado 2 segundos para desemparejar');
+  }
+});
+botonAjustes.addEventListener('pointercancel', cancelarPresionAjustes);
+botonAjustes.addEventListener('pointerleave', cancelarPresionAjustes);
+
+$('desemparejar-cancelar').addEventListener('click', () => {
+  modalDesemparejar.hidden = true;
+});
+
+$('desemparejar-confirmar').addEventListener('click', () => {
+  modalDesemparejar.hidden = true;
+  desemparejar();
 });
 
 // En la app Android: botón de ajustes de voz, y la palabra clave despierta el modo noche.

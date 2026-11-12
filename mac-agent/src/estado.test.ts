@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parsearPmset, parsearVmStat, parsearVolumen } from './estado.ts';
+import { parsearClima, parsearPmset, parsearReproductor, parsearVmStat, parsearVolumen } from './estado.ts';
 
 test('vm_stat: suma apps (sin purgable) + fija + comprimida', () => {
   const salida = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
@@ -35,4 +35,52 @@ test('volumen', () => {
     silenciado: false,
   });
   assert.equal(parsearVolumen('missing value'), null);
+});
+
+test('reproductor: spotify y música con estado, título, artista y carátula', () => {
+  assert.deepEqual(
+    parsearReproductor('spotify\tplaying\tSong Name\tArtist Name\thttps://i.scdn.co/art.jpg'),
+    {
+      app: 'spotify',
+      estado: 'playing',
+      cancion: 'Song Name',
+      artista: 'Artist Name',
+      caratula: 'https://i.scdn.co/art.jpg',
+    },
+  );
+  assert.deepEqual(
+    parsearReproductor('music\tpaused\tOtra Canción\tOtro Artista\t'),
+    {
+      app: 'music',
+      estado: 'paused',
+      cancion: 'Otra Canción',
+      artista: 'Otro Artista',
+      caratula: null,
+    },
+  );
+  assert.equal(parsearReproductor('none'), null);
+  assert.equal(parsearReproductor(''), null);
+});
+
+test('clima: parsea formato wttr.in en español', () => {
+  assert.deepEqual(
+    parsearClima('🌦️ |+26°C|Llovizna ligera irregular|Ibagué, Tolima Department, CO'),
+    {
+      icono: '🌦️',
+      tempC: 26,
+      condicion: 'Llovizna ligera irregular',
+      ciudad: 'Ibagué',
+    },
+  );
+  assert.deepEqual(
+    parsearClima('☀️ |28°C|Despejado|Medellín, Antioquia, CO'),
+    {
+      icono: '☀️',
+      tempC: 28,
+      condicion: 'Despejado',
+      ciudad: 'Medellín',
+    },
+  );
+  assert.equal(parsearClima('<html>502 Bad Gateway</html>'), null);
+  assert.equal(parsearClima(''), null);
 });

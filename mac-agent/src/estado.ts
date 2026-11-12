@@ -13,6 +13,21 @@ export interface Volumen {
   silenciado: boolean;
 }
 
+export interface Reproductor {
+  app: 'spotify' | 'music';
+  estado: 'playing' | 'paused' | 'stopped';
+  cancion: string;
+  artista: string;
+  caratula: string | null;
+}
+
+export interface Clima {
+  ciudad: string;
+  tempC: number;
+  condicion: string;
+  icono: string;
+}
+
 export interface EstadoMac {
   nombre: string;
   sistema: string;
@@ -24,6 +39,8 @@ export interface EstadoMac {
   disco: { libreBytes: number; totalBytes: number } | null;
   bateria: Bateria | null;
   volumen: Volumen | null;
+  reproductor?: Reproductor | null;
+  clima?: Clima | null;
   momento: string;
 }
 
@@ -62,6 +79,40 @@ export function parsearVolumen(salida: string): Volumen | null {
   return { nivel: Number(nivel[1]), silenciado: mudo?.[1] === 'true' };
 }
 
+/** `osascript` con Spotify / Música → Reproductor o null si nada suena. */
+export function parsearReproductor(salida: string): Reproductor | null {
+  const limpia = salida.trim();
+  if (!limpia || limpia === 'none') return null;
+  const partes = limpia.split('\t');
+  if (partes.length < 4) return null;
+  const app = partes[0] === 'spotify' || partes[0] === 'music' ? partes[0] : null;
+  if (!app) return null;
+  const estadoRaw = partes[1].toLowerCase();
+  const estado: Reproductor['estado'] =
+    estadoRaw === 'playing' ? 'playing' : estadoRaw === 'paused' ? 'paused' : 'stopped';
+  const cancion = partes[2].trim();
+  const artista = partes[3].trim();
+  const caratula = partes[4]?.trim() || null;
+  if (!cancion) return null;
+  return { app, estado, cancion, artista, caratula };
+}
+
+/** `wttr.in/?format=%c|%t|%C|%l&lang=es` → Clima o null. */
+export function parsearClima(salida: string): Clima | null {
+  const limpia = salida.trim();
+  if (!limpia || limpia.startsWith('<') || limpia.includes('502') || limpia.includes('404')) return null;
+  const partes = limpia.split('|');
+  if (partes.length < 4) return null;
+  const icono = partes[0].trim();
+  const tempStr = partes[1].replace(/[^0-9-]/g, '');
+  const tempC = Number(tempStr);
+  if (Number.isNaN(tempC)) return null;
+  const condicion = partes[2].trim();
+  const ciudad = partes[3].split(',')[0].trim();
+  if (!ciudad) return null;
+  return { ciudad, tempC, condicion, icono };
+}
+
 function tiemposCpu() {
   let ocupado = 0;
   let total = 0;
@@ -84,6 +135,33 @@ function leerDisco(): EstadoMac['disco'] {
   }
 }
 
+const SCRIPT_REPRODUCTOR = `
+if application "Spotify" is running then
+  tell application "Spotify"
+    set estado to player state as string
+    if estado is not "stopped" then
+      set trackName to name of current track
+      set artistName to artist of current track
+      set albumArt to ""
+      try
+        set albumArt to artwork url of current track
+      end try
+      return "spotify" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & albumArt
+    end if
+  end tell
+else if application "Music" is running then
+  tell application "Music"
+    set estado to player state as string
+    if estado is not "stopped" then
+      set trackName to name of current track
+      set artistName to artist of current track
+      return "music" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & ""
+    end if
+  end tell
+end if
+return "none"
+`;
+
 /**
  * Muestrea el estado con caché por campo: lo barato (CPU, RAM) en cada lectura,
  * lo que lanza procesos (batería, versión de macOS) con menos frecuencia.
@@ -92,6 +170,8 @@ export class Monitor {
   private previoCpu = tiemposCpu();
   private sistema = '';
   private bateria: { valor: Bateria | null; en: number } = { valor: null, en: 0 };
+  private reproductor: { valor: Reproductor | null; en: number } = { valor: null, en: 0 };
+  private clima: { valor: Clima | null; en: number } = { valor: null, en: 0 };
   private readonly ejecutar: Ejecutor;
 
   constructor(ejecutar: Ejecutor) {
@@ -127,6 +207,30 @@ export class Monitor {
         en: Date.now(),
       };
     }
+    if (Date.now() - this.reproductor.en > 2500) {
+      this.reproductor = {
+        valor: await this.intentar(async () => {
+          const salida = await this.ejecutar('osascript', ['-e', SCRIPT_REPRODUCTOR]);
+          return parsearReproductor(salida);
+        }, null),
+        en: Date.now(),
+      };
+    }
+    const reintentoClima = this.clima.valor ? 20 * 60_000 : 60_000;
+    if (Date.now() - this.clima.en > reintentoClima) {
+      this.clima = {
+        valor: await this.intentar(async () => {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 4000);
+          const res = await fetch('https://wttr.in/?format=%c|%t|%C|%l&lang=es', { signal: ctrl.signal });
+          clearTimeout(t);
+          if (!res.ok) return this.clima.valor;
+          const txt = await res.text();
+          return parsearClima(txt) ?? this.clima.valor;
+        }, this.clima.valor),
+        en: Date.now(),
+      };
+    }
     const [memUsada, volumen] = await Promise.all([
       this.intentar(async () => parsearVmStat(await this.ejecutar('vm_stat', [])), null),
       this.intentar(
@@ -146,6 +250,8 @@ export class Monitor {
       disco: leerDisco(),
       bateria: this.bateria.valor,
       volumen,
+      reproductor: this.reproductor.valor,
+      clima: this.clima.valor,
       momento: new Date().toISOString(),
     };
   }

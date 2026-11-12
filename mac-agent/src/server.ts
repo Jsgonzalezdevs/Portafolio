@@ -5,6 +5,9 @@ import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts'
 import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
 import { cargarClaveAnthropic, cargarClaveGroq, cargarConfig, RAIZ, type Config } from './config.ts';
 import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
+import { Publicador } from './publicador.ts';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { ejecutar } from './ejecutor.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
 
@@ -282,6 +285,21 @@ if (import.meta.main) {
     }),
     log,
   });
+  if (config.publicar) {
+    const publicador = new Publicador({
+      token: config.token,
+      rutaLog: join(homedir(), 'Library/Logs/mac-agent-tunel.log'),
+      carpeta: join(RAIZ, 'publicacion'),
+      remoto: config.publicar.remoto,
+      rama: config.publicar.rama,
+      run: ejecutar,
+      log,
+    });
+    const publicar = () => publicador.revisar().catch((e: Error) => log(`publicar dirección: ${e.message}`));
+    setTimeout(publicar, 5000).unref();
+    setInterval(publicar, 60_000).unref();
+  }
+
   if (avisador) {
     // Cada minuto: ¿venció algún recordatorio? El panel lo recibe en el estado.
     setInterval(() => {

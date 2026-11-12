@@ -192,6 +192,8 @@ function describirEstado(e: EstadoMac): string {
     disco_libre: e.disco ? gb(e.disco.libreBytes) : 'desconocido',
     bateria: e.bateria ?? 'sin batería (escritorio)',
     volumen: e.volumen ?? 'desconocido',
+    musica: e.reproductor ? `${e.reproductor.cancion} - ${e.reproductor.artista} (${e.reproductor.estado})` : 'nada sonando',
+    clima: e.clima ? `${e.clima.tempC}°C, ${e.clima.condicion} en ${e.clima.ciudad}` : undefined,
     encendida_horas: Math.round(e.uptimeSeg / 360) / 10,
   });
 }

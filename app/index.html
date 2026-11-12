@@ -29,12 +29,19 @@
     <main id="pantalla-panel" class="panel" hidden>
       <header class="panel__reloj">
         <div id="hora" class="hora">--:--</div>
-        <div id="fecha" class="fecha"></div>
+        <div class="reloj__subfila">
+          <div id="fecha" class="fecha"></div>
+          <div id="clima" class="clima" hidden>
+            <span id="clima-icono" class="clima__icono">⛅</span>
+            <span id="clima-temp" class="clima__temp">--°</span>
+            <span id="clima-ciudad" class="clima__ciudad tenue"></span>
+          </div>
+        </div>
         <div class="barra-estado">
           <span id="conexion" class="pastilla" data-estado="conectando">Conectando…</span>
           <button id="boton-noche" class="boton boton--icono" type="button" aria-label="Modo noche"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12.3 2a10 10 0 1 0 9.7 12.6A8 8 0 0 1 12.3 2z"/></svg></button>
           <button id="boton-voz" class="boton boton--chico" type="button" hidden>Voz</button>
-          <button id="boton-ajustes" class="boton boton--icono" type="button" aria-label="Desemparejar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
+          <button id="boton-ajustes" class="boton boton--icono" type="button" aria-label="Desemparejar (mantener presionado)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
         </div>
       </header>
 
@@ -70,7 +77,35 @@
       </section>
 
       <section id="tarjeta-control" class="tarjeta" aria-labelledby="t-control">
-        <h2 id="t-control">Control</h2>
+        <div class="tarjeta__cabecera">
+          <h2 id="t-control">Control</h2>
+          <span id="media-badge" class="badge-app tenue" hidden>Spotify</span>
+        </div>
+
+        <div id="media-box" class="media-box">
+          <!-- Vista activa con canción -->
+          <div id="media-activo" class="media-activo" hidden>
+            <div class="media-caratula-caja">
+              <img id="media-caratula" src="" alt="Portada" class="media-caratula" />
+            </div>
+            <div class="media-info">
+              <p id="media-titulo" class="media-titulo">–</p>
+              <p id="media-artista" class="media-artista tenue">–</p>
+            </div>
+          </div>
+
+          <!-- Vista en reposo si no hay música -->
+          <div id="media-reposo" class="media-reposo">
+            <div class="media-vinilo" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+            </div>
+            <div class="media-info">
+              <p class="media-titulo">Sin reproducción</p>
+              <p class="media-artista tenue">Mac en silencio</p>
+            </div>
+          </div>
+        </div>
+
         <div class="volumen">
           <button id="boton-mute" class="boton boton--icono" type="button" aria-label="Silenciar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-vol"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-mute" hidden><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm18.7 1.4-1.4-1.4L18 11.3 15.7 9l-1.4 1.4 2.3 2.3-2.3 2.3 1.4 1.4 2.3-2.3 2.3 2.3 1.4-1.4-2.3-2.3z"/></svg></button>
           <input id="volumen" type="range" min="0" max="100" step="5" aria-label="Volumen" />
@@ -78,7 +113,7 @@
         </div>
         <div class="fila">
           <button class="boton" type="button" data-accion="media.anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
-          <button class="boton boton--primario" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>
+          <button id="boton-playpause" class="boton boton--primario" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-playpause"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>
           <button class="boton" type="button" data-accion="media.siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
           <button class="boton" type="button" data-accion="pantalla.apagar">Apagar pantalla</button>
         </div>
@@ -104,6 +139,19 @@
         <div class="fila">
           <button id="recordatorio-hecho" class="boton boton--primario" type="button">Hecho</button>
           <button id="recordatorio-ok" class="boton" type="button">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal seguro para desemparejar (requiere confirmación deliberada) -->
+    <div id="modal-desemparejar" class="recordatorio" role="alertdialog" aria-labelledby="desemparejar-titulo" hidden>
+      <div class="recordatorio__caja desemparejar__caja">
+        <p class="tenue">Zona de seguridad</p>
+        <h2 id="desemparejar-titulo" class="desemparejar__titulo">¿Desemparejar la tablet?</h2>
+        <p class="desemparejar__texto tenue">Se borrará el token guardado en esta tablet y tendrás que volver a ingresar los datos para conectar con la Mac.</p>
+        <div class="fila fila--centrada">
+          <button id="desemparejar-cancelar" class="boton boton--primario" type="button">Cancelar y mantener</button>
+          <button id="desemparejar-confirmar" class="boton boton--peligro" type="button">Sí, desemparejar</button>
         </div>
       </div>
     </div>
