@@ -27,6 +27,20 @@ describe('emparejamiento', () => {
     expect(emparejamientoDesdeHash('#token=abc')).toBeNull();
     expect(emparejamientoDesdeHash('')).toBeNull();
   });
+
+  it('descifra la URL publicada con el token', async () => {
+    const { descifrarAgente } = await import('./conexion');
+    // Payload generado con cifrarUrl en el backend
+    const token = 'd469dd9fd97b2b67568f748216be38211153466ad139b7b6c32a9623a478d2a8';
+    const publicado = {
+      v: 1 as const,
+      iv: 'SL7VKtzoQ8PGhuIY',
+      datos: 'pJC7FaKA12TrwbUWUk6OgTJZ0LaVpC5rQfsb2xGwkiRyYIAIlLEDKD+Rf+FJe2nYQ7H9OVva+oVX5eUWVf8XRUefDt2LFoy4bgkd',
+      actualizado: '2026-11-12T12:33:20.912Z',
+    };
+    const url = await descifrarAgente(publicado, token);
+    expect(url).toBe('https://comply-divisions-recreation-medal.trycloudflare.com');
+  });
 });
 
 describe('formato', () => {

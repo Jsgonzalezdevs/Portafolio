@@ -83,6 +83,18 @@ export class Publicador {
   async revisar(): Promise<string | null> {
     const contenido = await readFile(this.o.rutaLog, 'utf8').catch(() => '');
     const url = ultimaUrlDelLog(contenido);
+
+    // Si el túnel expiró en Cloudflare o está caído, lo reinicia para que genere una nueva URL
+    if (contenido.includes('Unauthorized: Tunnel not found') || (url && !(await this.comprobar(url)))) {
+      try {
+        await this.o.run('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/lat.juliangonzalez.tunel`]);
+        this.o.log?.('túnel caído detectado: reiniciado con launchctl kickstart');
+      } catch {
+        // Ignora fallo si no corre como launchd
+      }
+      return null;
+    }
+
     if (!url || url === this.publicada) return null;
     // Una URL vieja del log (túnel caído) no se publica: el panel la descartaría igual.
     if (!(await this.comprobar(url))) return null;

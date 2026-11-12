@@ -2,6 +2,7 @@ import './app.css';
 import {
   abrirFlujo,
   cargarEmparejamiento,
+  consultarAgentePublicado,
   emparejamientoDesdeHash,
   ErrorNoAutorizado,
   guardarEmparejamiento,
@@ -912,6 +913,18 @@ async function arrancar() {
     await iniciar(guardado);
   } catch (e) {
     if (e instanceof ErrorNoAutorizado) return desemparejar('El token ya no es válido. Vuelve a emparejar.');
+    // Si la URL del túnel cambió, busca automáticamente la nueva publicada en la nube
+    const nuevaUrl = await consultarAgentePublicado(guardado.token);
+    if (nuevaUrl && nuevaUrl !== guardado.agente) {
+      guardado.agente = nuevaUrl;
+      guardarEmparejamiento(guardado);
+      try {
+        await iniciar(guardado);
+        return;
+      } catch {
+        // continúa abajo con el sondeo
+      }
+    }
     // La Mac puede estar apagada al encender la tablet: se muestra el panel y el flujo reintenta solo.
     emparejamiento = guardado;
     guardarEmparejamiento(guardado);
@@ -925,6 +938,11 @@ async function arrancar() {
 async function arrancarDeNuevo(e: Emparejamiento) {
   if (emparejamiento !== e || cerrarFlujo) return;
   try {
+    const nuevaUrl = await consultarAgentePublicado(e.token);
+    if (nuevaUrl && nuevaUrl !== e.agente) {
+      e.agente = nuevaUrl;
+      guardarEmparejamiento(e);
+    }
     await iniciar(e);
   } catch (err) {
     if (err instanceof ErrorNoAutorizado) return desemparejar('El token ya no es válido. Vuelve a emparejar.');

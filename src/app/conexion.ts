@@ -52,7 +52,40 @@ export function guardarEmparejamiento(e: Emparejamiento | null): void {
   }
 }
 
-export async function llamar<T>(e: Emparejamiento, ruta: string, cuerpo?: unknown): Promise<T> {
+export interface Publicado {
+  v: 1;
+  iv: string;
+  datos: string;
+  actualizado: string;
+}
+
+/** Descifra la URL del agente publicada en GitHub usando WebCrypto y el token. */
+export async function descifrarAgente(p: Publicado, token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const claveMaterial = await crypto.subtle.digest('SHA-256', encoder.encode(`mac-agent/url/v1:${token}`));
+  const clave = await crypto.subtle.importKey('raw', claveMaterial, 'AES-GCM', false, ['decrypt']);
+  const iv = Uint8Array.from(atob(p.iv), (c) => c.charCodeAt(0));
+  const datos = Uint8Array.from(atob(p.datos), (c) => c.charCodeAt(0));
+  const descifrado = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, clave, datos);
+  return new TextDecoder().decode(descifrado);
+}
+
+export const URL_AGENTE_PUBLICADO = 'https://raw.githubusercontent.com/Jsgonzalezdevs/Portafolio/agente/agente.json';
+
+/** Consulta si hay una nueva dirección de túnel publicada en GitHub cifrada con el token. */
+export async function consultarAgentePublicado(token: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${URL_AGENTE_PUBLICADO}?_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const p = (await res.json()) as Publicado;
+    if (p.v !== 1 || !p.iv || !p.datos) return null;
+    return await descifrarAgente(p, token);
+  } catch {
+    return null;
+  }
+}
+
+async function llamarDirecto<T>(e: Emparejamiento, ruta: string, cuerpo?: unknown): Promise<T> {
   const r = await fetch(`${e.agente}${ruta}`, {
     method: cuerpo === undefined ? 'GET' : 'POST',
     headers: {
@@ -66,6 +99,22 @@ export async function llamar<T>(e: Emparejamiento, ruta: string, cuerpo?: unknow
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((datos as { error?: string }).error ?? `Error ${r.status}`);
   return datos as T;
+}
+
+export async function llamar<T>(e: Emparejamiento, ruta: string, cuerpo?: unknown): Promise<T> {
+  try {
+    return await llamarDirecto<T>(e, ruta, cuerpo);
+  } catch (err) {
+    if (err instanceof ErrorNoAutorizado) throw err;
+    // Si la llamada falló por caída de red o túnel cerrado, intenta actualizar la dirección
+    const nuevaUrl = await consultarAgentePublicado(e.token);
+    if (nuevaUrl && nuevaUrl !== e.agente) {
+      e.agente = nuevaUrl;
+      guardarEmparejamiento(e);
+      return await llamarDirecto<T>(e, ruta, cuerpo);
+    }
+    throw err;
+  }
 }
 
 export interface EventoSSE {
@@ -163,6 +212,13 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
     } catch {
       clearTimeout(vigilante);
       op.alCambioConexion('sin-conexion');
+      void consultarAgentePublicado(e.token).then((nuevaUrl) => {
+        if (nuevaUrl && nuevaUrl !== e.agente) {
+          e.agente = nuevaUrl;
+          guardarEmparejamiento(e);
+          espera = 1000;
+        }
+      });
       espera = Math.min(espera * 2, 30_000);
     }
     programar(sondear, espera);
@@ -211,6 +267,15 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
       return void sondear();
     }
     op.alCambioConexion('sin-conexion');
+    if (!abierta) {
+      void consultarAgentePublicado(e.token).then((nuevaUrl) => {
+        if (nuevaUrl && nuevaUrl !== e.agente) {
+          e.agente = nuevaUrl;
+          guardarEmparejamiento(e);
+          espera = 1000;
+        }
+      });
+    }
     programar(conectar, espera);
     espera = Math.min(espera * 2, 30_000);
   };
