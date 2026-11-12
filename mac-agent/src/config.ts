@@ -54,6 +54,8 @@ export interface Config {
    * panel la encuentre solo. Lo rellena el instalador con el remoto del repo.
    */
   publicar?: { remoto: string; rama: string };
+  /** Ciudad para el reporte del clima (ej. "Ibague"). Por defecto "Ibague". */
+  ciudad?: string;
   token: string;
 }
 
@@ -63,6 +65,7 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
   puerto: 8787,
   host: '127.0.0.1',
   origenes: ['https://juliangonzalez.lat', 'https://www.juliangonzalez.lat', 'http://localhost:5173'],
+  ciudad: 'Ibague',
   escenas: [
     { id: 'trabajo', nombre: 'Modo Trabajo', atajo: 'Modo Trabajo' },
     { id: 'buenas-noches', nombre: 'Buenas Noches', atajo: 'Buenas Noches' },
@@ -122,7 +125,12 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
       throw new Error('config: "publicar.rama" debe ser una rama propia (no main)');
     }
   }
-  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, asistente, publicar };
+  const ciudad =
+    typeof (crudo as Record<string, unknown>)?.ciudad === 'string' &&
+    ((crudo as Record<string, unknown>).ciudad as string).trim()
+      ? ((crudo as Record<string, unknown>).ciudad as string).trim()
+      : 'Ibague';
+  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, asistente, publicar, ciudad };
 }
 
 /** Token del dispositivo: AGENT_TOKEN si existe; si no, uno generado y guardado en .token (permisos 600). */

@@ -435,7 +435,7 @@ export function crearServidor({
 if (import.meta.main) {
   const config = cargarConfig();
   const log = (l: string) => console.log(`[${new Date().toISOString()}] ${l}`);
-  const monitor = new Monitor(ejecutar);
+  const monitor = new Monitor(ejecutar, config.ciudad ?? 'Ibague');
   const acciones = crearAcciones(config, ejecutar);
   const agenda = agendaInstalada(RAIZ, ejecutar);
   const avisador = agenda ? new Avisador(agenda) : undefined;

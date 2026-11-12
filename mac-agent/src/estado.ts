@@ -108,8 +108,9 @@ export function parsearClima(salida: string): Clima | null {
   const tempC = Number(tempStr);
   if (Number.isNaN(tempC)) return null;
   const condicion = partes[2].trim();
-  const ciudad = partes[3].split(',')[0].trim();
+  let ciudad = partes[3].split(',')[0].trim();
   if (!ciudad) return null;
+  if (ciudad.toLowerCase() === 'ibague') ciudad = 'Ibagué';
   return { ciudad, tempC, condicion, icono };
 }
 
@@ -174,9 +175,16 @@ export class Monitor {
   private clima: { valor: Clima | null; en: number } = { valor: null, en: 0 };
   private fondo: { valor: string | null; en: number } = { valor: null, en: 0 };
   private readonly ejecutar: Ejecutor;
+  private ciudad: string;
 
-  constructor(ejecutar: Ejecutor) {
+  constructor(ejecutar: Ejecutor, ciudad = 'Ibague') {
     this.ejecutar = ejecutar;
+    this.ciudad = ciudad;
+  }
+
+  fijarCiudad(c: string) {
+    this.ciudad = c.trim();
+    this.clima = { valor: null, en: 0 };
   }
 
   private cpuPct(): number {
@@ -269,7 +277,8 @@ export class Monitor {
         valor: await this.intentar(async () => {
           const ctrl = new AbortController();
           const t = setTimeout(() => ctrl.abort(), 4000);
-          const res = await fetch('https://wttr.in/?format=%c|%t|%C|%l&lang=es', { signal: ctrl.signal });
+          const q = this.ciudad ? encodeURIComponent(this.ciudad) : '';
+          const res = await fetch(`https://wttr.in/${q}?format=%c|%t|%C|%l&lang=es`, { signal: ctrl.signal });
           clearTimeout(t);
           if (!res.ok) return this.clima.valor;
           const txt = await res.text();
