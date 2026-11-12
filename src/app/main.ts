@@ -12,7 +12,7 @@ import {
 } from './conexion';
 import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
-import { bytes, duracion, esDeNoche, porcentaje } from './formato';
+import { bytes, duracion, esDeNoche, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
 
 interface Reproductor {
   app: 'spotify' | 'music';
@@ -54,12 +54,58 @@ interface Catalogo {
   apps: { id: string; nombre: string }[];
 }
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+export interface Alarma {
+  id: string;
+  hora: string;
+  dias: number[];
+  titulo: string;
+  activa: boolean;
+}
+
+interface ResumenMac {
+  clima?: Clima | null;
+  eventosHoy?: { titulo: string; inicio: string; todoElDia?: boolean }[];
+  recordatoriosPendientes?: { id: string; titulo: string; vence: string | null }[];
+  alarmasHoy?: Alarma[];
+  saludo?: string;
+  hora?: string;
+}
+
+const $ = <T extends Element = HTMLElement>(id: string) => document.getElementById(id) as unknown as T;
 
 let emparejamiento: Emparejamiento | null = null;
 let cerrarFlujo: (() => void) | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
 let tocandoVolumen = false;
+let ultimoEstadoMac: EstadoMac | null = null;
+let ultimoResumen: ResumenMac | null = null;
+let alarmasCache: Alarma[] = [];
+
+// ---------- Fondo dinámico ----------
+let temporizadorFondo: number | undefined;
+let urlFondoActual: string | null = null;
+
+async function cargarFondo(e: Emparejamiento) {
+  try {
+    const resp = await fetch(`${e.agente}/fondo`, {
+      headers: { Authorization: `Bearer ${e.token}` },
+      cache: 'no-store',
+    });
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const nuevaUrl = URL.createObjectURL(blob);
+    const fondoEl = $('fondo-mac');
+    if (fondoEl) {
+      fondoEl.style.backgroundImage = `url("${nuevaUrl}")`;
+    }
+    if (urlFondoActual) {
+      URL.revokeObjectURL(urlFondoActual);
+    }
+    urlFondoActual = nuevaUrl;
+  } catch {
+    // Si falla o la Mac está apagada, se conserva el fondo predeterminado
+  }
+}
 
 // ---------- Avisos ----------
 let temporizadorAviso: number | undefined;
@@ -87,6 +133,9 @@ function pintarReloj() {
   $('fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
   const noche = (nocheManual ?? esDeNoche(ahora)) && Date.now() > despiertoHasta;
   $('noche').hidden = !noche || !emparejamiento;
+
+  actualizarAhora();
+
   // Alineado al cambio de minuto: un tic por minuto en vez de uno por segundo.
   window.setTimeout(pintarReloj, 60_000 - (Date.now() % 60_000) + 50);
 }
@@ -106,6 +155,305 @@ $('noche').addEventListener('click', () => {
   }, 60_500);
 });
 
+// ---------- Tarjeta Ahora ----------
+function actualizarAhora() {
+  const ahora = new Date();
+  const h = ahora.getHours();
+  const tarjetaAhora = $('tarjeta-ahora');
+  if (!tarjetaAhora) return;
+
+  // De noche (22:00 a 6:00), ocultar la tarjeta
+  if (h >= 22 || h < 6) {
+    tarjetaAhora.hidden = true;
+    return;
+  }
+  tarjetaAhora.hidden = false;
+
+  const { saludo, icono, periodo } = saludoSegunHora(ahora);
+  const elSaludo = $('ahora-saludo');
+  const elIcono = $('ahora-icono');
+  if (elSaludo) elSaludo.textContent = saludo;
+  if (elIcono) elIcono.textContent = icono;
+
+  const clima = ultimoResumen?.clima ?? ultimoEstadoMac?.clima;
+  const textoClima = clima ? `${clima.tempC > 0 ? '+' : ''}${clima.tempC}° en ${clima.ciudad} (${clima.condicion.toLowerCase()})` : '';
+
+  let mensajeResumen = '';
+  if (periodo === 'manana') {
+    // Mañana (6-12): "Buenos días, Julian 🌅" + weather summary + today's event count from agenda + first alarm
+    const eventos = ultimoResumen?.eventosHoy ?? [];
+    const nEventos = eventos.length;
+    const primeraAlarma = alarmasCache.find((a) => a.activa);
+    const partes: string[] = [];
+    if (textoClima) partes.push(textoClima);
+    partes.push(nEventos === 0 ? 'Sin eventos hoy' : `${nEventos} evento${nEventos > 1 ? 's' : ''} hoy`);
+    if (primeraAlarma) partes.push(`Alarma a las ${primeraAlarma.hora}`);
+    mensajeResumen = partes.join(' · ');
+  } else if (periodo === 'tarde') {
+    // Tarde (12-18): "Buenas tardes ☀️" + next upcoming event or "Nada pendiente"
+    const eventos = ultimoResumen?.eventosHoy ?? [];
+    const proximo = eventos.find((ev) => !ev.todoElDia && new Date(ev.inicio) >= ahora);
+    if (proximo) {
+      const horaEv = formatoHora.format(new Date(proximo.inicio));
+      mensajeResumen = `${proximo.titulo} a las ${horaEv}${textoClima ? ` · ${textoClima}` : ''}`;
+    } else {
+      mensajeResumen = `Nada pendiente por hoy${textoClima ? ` · ${textoClima}` : ''}`;
+    }
+  } else if (periodo === 'noche') {
+    // Noche (18-22): "Buenas noches 🌙" + summary of tomorrow
+    mensajeResumen = `Prepárate para descansar${textoClima ? ` · ${textoClima}` : ''}`;
+  }
+
+  const elResumen = $('ahora-resumen');
+  if (elResumen) elResumen.textContent = mensajeResumen || 'Todo en orden.';
+}
+
+let temporizadorResumen: number | undefined;
+async function cargarResumen(e: Emparejamiento) {
+  try {
+    ultimoResumen = await llamar<ResumenMac>(e, '/resumen');
+    if (ultimoResumen?.alarmasHoy && !alarmasCache.length) {
+      pintarAlarmas(ultimoResumen.alarmasHoy);
+    }
+  } catch {
+    // Continúa con estado local si el endpoint no está disponible
+  }
+  actualizarAhora();
+}
+
+// ---------- Alarmas ----------
+async function cargarAlarmas(e: Emparejamiento) {
+  try {
+    const res = await llamar<{ alarmas: Alarma[] }>(e, '/alarmas');
+    pintarAlarmas(res.alarmas ?? []);
+  } catch {
+    // Si falla la Mac
+  }
+}
+
+function pintarAlarmas(alarmas: Alarma[]) {
+  alarmasCache = alarmas;
+  const lista = $('lista-alarmas');
+  if (!lista) return;
+  lista.textContent = '';
+  if (!alarmas.length) {
+    const vacio = document.createElement('li');
+    vacio.className = 'tenue';
+    vacio.textContent = 'Sin alarmas';
+    lista.appendChild(vacio);
+    actualizarAhora();
+    return;
+  }
+
+  for (const a of alarmas) {
+    const li = document.createElement('li');
+    li.className = a.activa ? 'alarma-item' : 'alarma-item inactiva';
+
+    const izq = document.createElement('div');
+    izq.className = 'alarma-item__izq';
+    const hora = document.createElement('time');
+    hora.className = 'alarma-item__hora';
+    hora.textContent = a.hora;
+    const tit = document.createElement('span');
+    tit.className = 'alarma-item__titulo';
+    tit.textContent = a.titulo;
+    izq.append(hora, tit);
+
+    const acciones = document.createElement('div');
+    acciones.className = 'alarma-item__acciones';
+
+    const bToggle = document.createElement('button');
+    bToggle.type = 'button';
+    bToggle.className = a.activa ? 'boton-toggle activa' : 'boton-toggle';
+    bToggle.textContent = a.activa ? 'ACTIVA' : 'INACTIVA';
+    bToggle.setAttribute('aria-label', `Alternar alarma ${a.titulo}`);
+    bToggle.addEventListener('click', async () => {
+      if (!emparejamiento) return;
+      bToggle.disabled = true;
+      try {
+        await llamar(emparejamiento, `/alarmas/${encodeURIComponent(a.id)}/toggle`, {});
+        await cargarAlarmas(emparejamiento);
+      } catch {
+        avisar('No se pudo alternar la alarma', true);
+      } finally {
+        bToggle.disabled = false;
+      }
+    });
+
+    const bEliminar = document.createElement('button');
+    bEliminar.type = 'button';
+    bEliminar.className = 'boton-eliminar-alarma';
+    bEliminar.textContent = '×';
+    bEliminar.setAttribute('aria-label', `Eliminar alarma ${a.titulo}`);
+    bEliminar.addEventListener('click', async () => {
+      if (!emparejamiento) return;
+      bEliminar.disabled = true;
+      try {
+        await fetch(`${emparejamiento.agente}/alarmas/${encodeURIComponent(a.id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${emparejamiento.token}` },
+        });
+        avisar('Alarma eliminada');
+        await cargarAlarmas(emparejamiento);
+      } catch {
+        avisar('No se pudo eliminar la alarma', true);
+      } finally {
+        bEliminar.disabled = false;
+      }
+    });
+
+    acciones.append(bToggle, bEliminar);
+    li.append(izq, acciones);
+    lista.appendChild(li);
+  }
+  actualizarAhora();
+}
+
+$('boton-nueva-alarma').addEventListener('click', () => {
+  $<HTMLInputElement>('campo-alarma-hora').value = '';
+  $<HTMLInputElement>('campo-alarma-titulo').value = '';
+  $('modal-alarma').hidden = false;
+});
+
+$('alarma-cancelar').addEventListener('click', () => {
+  $('modal-alarma').hidden = true;
+});
+
+$<HTMLFormElement>('form-alarma').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!emparejamiento) return;
+  const hora = $<HTMLInputElement>('campo-alarma-hora').value.trim();
+  const titulo = $<HTMLInputElement>('campo-alarma-titulo').value.trim() || 'Alarma';
+  if (!hora) return;
+
+  const submitBtn = (ev.target as HTMLFormElement).querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    await llamar(emparejamiento, '/alarmas', { hora, titulo });
+    $('modal-alarma').hidden = true;
+    avisar('Alarma creada');
+    await cargarAlarmas(emparejamiento);
+  } catch (err) {
+    avisar(err instanceof Error ? err.message : 'Error al crear alarma', true);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+});
+
+// ---------- Temporizador (Frontend) ----------
+let timerSegundosRestantes = 0;
+let timerSegundosTotales = 0;
+let timerIntervalo: number | undefined;
+
+function sonarPitidoTimer() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const t0 = ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const inicio = t0 + i * 0.5;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, inicio);
+      gain.gain.setValueAtTime(0.3, inicio);
+      gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(inicio);
+      osc.stop(inicio + 0.3);
+    }
+  } catch {
+    /* contexto de audio no disponible */
+  }
+}
+
+function actualizarTimerUI() {
+  const texto = formatoTiempoTimer(timerSegundosRestantes);
+  $('timer-cuenta').textContent = texto;
+  $('timer-indicador-texto').textContent = texto;
+  const arco = $<SVGCircleElement>('timer-arco');
+  if (arco && timerSegundosTotales > 0) {
+    const circunferencia = 314.16; // 2 * PI * 50
+    const fraccion = timerSegundosRestantes / timerSegundosTotales;
+    arco.style.strokeDashoffset = String(circunferencia * (1 - fraccion));
+  }
+}
+
+function iniciarTimer(minutos: number) {
+  detenerTimer();
+  timerSegundosTotales = Math.max(1, Math.round(minutos * 60));
+  timerSegundosRestantes = timerSegundosTotales;
+  actualizarTimerUI();
+  $('timer-activo-vista').hidden = false;
+  $('timer-config-vista').hidden = true;
+  $('timer-indicador').hidden = false;
+
+  timerIntervalo = window.setInterval(() => {
+    timerSegundosRestantes--;
+    if (timerSegundosRestantes <= 0) {
+      detenerTimer();
+      sonarPitidoTimer();
+      avisar('⏱ ¡Temporizador finalizado!');
+    } else {
+      actualizarTimerUI();
+    }
+  }, 1000);
+}
+
+function detenerTimer() {
+  if (timerIntervalo !== undefined) {
+    clearInterval(timerIntervalo);
+    timerIntervalo = undefined;
+  }
+  timerSegundosRestantes = 0;
+  timerSegundosTotales = 0;
+  $('timer-activo-vista').hidden = true;
+  $('timer-config-vista').hidden = false;
+  $('timer-indicador').hidden = true;
+}
+
+$('boton-timer').addEventListener('click', () => {
+  $('modal-timer').hidden = false;
+});
+
+$('timer-indicador').addEventListener('click', () => {
+  $('modal-timer').hidden = false;
+});
+
+$('timer-cerrar').addEventListener('click', () => {
+  $('modal-timer').hidden = true;
+});
+
+$('timer-cerrar-activo').addEventListener('click', () => {
+  $('modal-timer').hidden = true;
+});
+
+$('timer-cancelar').addEventListener('click', () => {
+  detenerTimer();
+});
+
+document.querySelectorAll<HTMLButtonElement>('.boton--preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const mins = Number(btn.dataset.minutos);
+    if (mins > 0) {
+      iniciarTimer(mins);
+    }
+  });
+});
+
+$<HTMLFormElement>('form-timer-personalizado').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const input = $<HTMLInputElement>('timer-custom-min');
+  const mins = Number(input.value);
+  if (mins > 0) {
+    iniciarTimer(mins);
+    input.value = '';
+  }
+});
+
 // ---------- Mantener la pantalla encendida (si el navegador lo permite) ----------
 type WakeLock = { request: (t: 'screen') => Promise<unknown> };
 async function mantenerPantalla() {
@@ -113,7 +461,7 @@ async function mantenerPantalla() {
   try {
     await wl?.request('screen');
   } catch {
-    /* sin permiso o sin soporte: la app nativa lo resolverá en F4 */
+    /* sin permiso o sin soporte: la app nativa lo resolverá */
   }
 }
 document.addEventListener('visibilitychange', () => {
@@ -129,6 +477,7 @@ function medidor(barra: string, valor: string, pct: number, texto: string) {
 }
 
 function pintarEstado(e: EstadoMac) {
+  ultimoEstadoMac = e;
   $('mac-nombre').textContent = e.nombre;
   $('mac-sistema').textContent = e.sistema;
   const cpu = Math.round(e.cpuPct);
@@ -139,9 +488,41 @@ function pintarEstado(e: EstadoMac) {
     const usado = porcentaje(e.disco.totalBytes - e.disco.libreBytes, e.disco.totalBytes);
     medidor('disco-barra', 'disco-valor', usado, `${usado}%`);
   }
-  $('bateria').textContent = e.bateria
-    ? `${e.bateria.porcentaje}%${e.bateria.cargando ? ' · cargando' : e.bateria.conectada ? ' · enchufada' : ''}`
-    : 'Corriente';
+
+  // Anillo de batería SVG
+  const bateriaArco = $<SVGCircleElement>('bateria-arco');
+  const bateriaValor = $<SVGTextElement>('bateria-valor');
+  const bateriaIcono = $<SVGTextElement>('bateria-icono');
+  const elBateriaLegacy = document.getElementById('bateria');
+  const circunferencia = 163.36; // 2 * PI * 26
+
+  if (e.bateria) {
+    const pct = Math.max(0, Math.min(100, Math.round(e.bateria.porcentaje)));
+    const offset = circunferencia * (1 - pct / 100);
+    if (bateriaArco) {
+      bateriaArco.style.strokeDashoffset = String(offset);
+      bateriaArco.style.stroke = pct > 50 ? '#3ecf8e' : pct >= 20 ? '#f5b544' : '#ff6b6b';
+    }
+    if (bateriaValor) bateriaValor.textContent = `${pct}%`;
+    const cargando = Boolean(e.bateria.cargando || e.bateria.conectada);
+    if (bateriaIcono) bateriaIcono.style.display = cargando ? 'inline' : 'none';
+    if (bateriaValor) bateriaValor.setAttribute('y', cargando ? '42' : '37');
+    if (elBateriaLegacy) {
+      elBateriaLegacy.textContent = `${pct}%${e.bateria.cargando ? ' · cargando' : e.bateria.conectada ? ' · enchufada' : ''}`;
+    }
+  } else {
+    if (bateriaArco) {
+      bateriaArco.style.strokeDashoffset = '0';
+      bateriaArco.style.stroke = '#3ecf8e';
+    }
+    if (bateriaValor) {
+      bateriaValor.textContent = '100%';
+      bateriaValor.setAttribute('y', '42');
+    }
+    if (bateriaIcono) bateriaIcono.style.display = 'inline';
+    if (elBateriaLegacy) elBateriaLegacy.textContent = 'Corriente';
+  }
+
   $('uptime').textContent = duracion(e.uptimeSeg);
   $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
 
@@ -190,6 +571,8 @@ function pintarEstado(e: EstadoMac) {
   }
 
   agendaUI.mostrarAvisos(e.avisos);
+  actualizarAhora();
+
   ultimoVolumen = e.volumen;
   const rango = $<HTMLInputElement>('volumen');
   rango.disabled = !e.volumen;
@@ -248,17 +631,42 @@ $('boton-mute').addEventListener('click', () => {
   void accion('volumen.silenciar', { silenciar: !ultimoVolumen?.silenciado });
 });
 
+// ---------- Escenas e Íconos ----------
+const ICONOS_ESCENAS: Record<string, string> = {
+  trabajo: '💼',
+  'buenas-noches': '🌙',
+  cine: '🎬',
+};
+
+function iconoParaEscena(id: string): string {
+  return ICONOS_ESCENAS[id] ?? '⚡';
+}
+
 function pintarBotones(contenedor: string, accionId: string, items: { id: string; nombre: string }[]) {
   if (!items.length) return;
   const el = $(contenedor);
   el.textContent = '';
+  const esEscenas = contenedor === 'escenas';
+
   for (const item of items) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'boton';
     b.dataset.accion = accionId;
     b.dataset.id = item.id;
-    b.textContent = item.nombre;
+
+    if (esEscenas) {
+      b.className = 'boton boton--escena';
+      const icono = document.createElement('span');
+      icono.className = 'escena-icono';
+      icono.textContent = iconoParaEscena(item.id);
+      const nombre = document.createElement('span');
+      nombre.className = 'escena-nombre';
+      nombre.textContent = item.nombre;
+      b.append(icono, nombre);
+    } else {
+      b.className = 'boton';
+      b.textContent = item.nombre;
+    }
     el.appendChild(b);
   }
 }
@@ -276,6 +684,17 @@ function desemparejar(error = '') {
   cerrarFlujo = null;
   emparejamiento = null;
   guardarEmparejamiento(null);
+  clearInterval(temporizadorFondo);
+  temporizadorFondo = undefined;
+  clearInterval(temporizadorResumen);
+  temporizadorResumen = undefined;
+  if (urlFondoActual) {
+    URL.revokeObjectURL(urlFondoActual);
+    urlFondoActual = null;
+  }
+  const fondoEl = $('fondo-mac');
+  if (fondoEl) fondoEl.style.backgroundImage = '';
+  detenerTimer();
   mostrarEmparejar(error);
 }
 
@@ -291,6 +710,23 @@ async function iniciar(e: Emparejamiento) {
   $('pantalla-emparejar').hidden = true;
   $('pantalla-panel').hidden = false;
   void mantenerPantalla();
+
+  // Fondo dinámico
+  void cargarFondo(e);
+  clearInterval(temporizadorFondo);
+  temporizadorFondo = window.setInterval(() => void cargarFondo(e), 120_000);
+
+  // Resumen y Alarmas
+  void cargarResumen(e);
+  void cargarAlarmas(e);
+  clearInterval(temporizadorResumen);
+  temporizadorResumen = window.setInterval(() => {
+    if (emparejamiento) {
+      void cargarResumen(emparejamiento);
+      void cargarAlarmas(emparejamiento);
+    }
+  }, 60_000);
+
   cerrarFlujo?.();
   cerrarFlujo = abrirFlujo(e, {
     alEvento: (ev) => {

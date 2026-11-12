@@ -21,3 +21,26 @@ export function esDeNoche(fecha: Date): boolean {
   const h = fecha.getHours();
   return h >= 22 || h < 6;
 }
+
+export type PeriodoDia = 'manana' | 'tarde' | 'noche' | 'madrugada';
+
+export function saludoSegunHora(fecha: Date): { saludo: string; icono: string; periodo: PeriodoDia } {
+  const h = fecha.getHours();
+  if (h >= 6 && h < 12) {
+    return { saludo: 'Buenos días, Julian', icono: '🌅', periodo: 'manana' };
+  }
+  if (h >= 12 && h < 18) {
+    return { saludo: 'Buenas tardes', icono: '☀️', periodo: 'tarde' };
+  }
+  if (h >= 18 && h < 22) {
+    return { saludo: 'Buenas noches', icono: '🌙', periodo: 'noche' };
+  }
+  return { saludo: 'Buenas noches', icono: '🌙', periodo: 'madrugada' };
+}
+
+export function formatoTiempoTimer(segundosTotal: number): string {
+  const s = Math.max(0, Math.floor(segundosTotal));
+  const m = Math.floor(s / 60);
+  const segRestantes = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(segRestantes).padStart(2, '0')}`;
+}

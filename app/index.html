@@ -10,6 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
+    <div id="fondo-mac" aria-hidden="true"></div>
     <!-- Emparejamiento: solo la primera vez o si el token deja de valer -->
     <section id="pantalla-emparejar" class="emparejar" hidden>
       <form id="form-emparejar" class="tarjeta emparejar__caja" autocomplete="off">
@@ -39,11 +40,29 @@
         </div>
         <div class="barra-estado">
           <span id="conexion" class="pastilla" data-estado="conectando">Conectando…</span>
+          <span id="timer-indicador" class="pastilla timer-pastilla" hidden role="button" aria-label="Temporizador activo">⏱ <span id="timer-indicador-texto">00:00</span></span>
           <button id="boton-noche" class="boton boton--icono" type="button" aria-label="Modo noche"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12.3 2a10 10 0 1 0 9.7 12.6A8 8 0 0 1 12.3 2z"/></svg></button>
           <button id="boton-voz" class="boton boton--chico" type="button" hidden>Voz</button>
           <button id="boton-ajustes" class="boton boton--icono" type="button" aria-label="Desemparejar (mantener presionado)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
         </div>
       </header>
+
+      <section id="tarjeta-ahora" class="tarjeta tarjeta--ahora" aria-labelledby="t-ahora">
+        <div class="tarjeta__cabecera">
+          <h2 id="t-ahora" class="ahora__saludo"><span id="ahora-saludo">Buenos días, Julian</span> <span id="ahora-icono">🌅</span></h2>
+          <span id="ahora-badge" class="badge-app tenue">Ahora</span>
+        </div>
+        <p id="ahora-resumen" class="ahora__resumen tenue">Cargando…</p>
+        <div class="ahora__alarmas">
+          <div class="ahora__alarmas-cabecera">
+            <span class="ahora__subtitulo">Alarmas</span>
+            <button id="boton-nueva-alarma" class="boton boton--chico" type="button" aria-label="Nueva alarma">+ Alarma</button>
+          </div>
+          <ul id="lista-alarmas" class="lista-alarmas">
+            <li class="tenue">Sin alarmas hoy</li>
+          </ul>
+        </div>
+      </section>
 
       <section id="tarjeta-chat" class="tarjeta chat" aria-labelledby="t-chat" hidden>
         <div class="chat__cabecera">
@@ -69,11 +88,23 @@
         <div class="medidor"><span>CPU</span><div class="medidor__barra"><i id="cpu-barra"></i></div><b id="cpu-valor">–</b></div>
         <div class="medidor"><span>RAM</span><div class="medidor__barra"><i id="ram-barra"></i></div><b id="ram-valor">–</b></div>
         <div class="medidor"><span>Disco</span><div class="medidor__barra"><i id="disco-barra"></i></div><b id="disco-valor">–</b></div>
-        <dl class="datos">
-          <div><dt>Batería</dt><dd id="bateria">–</dd></div>
-          <div><dt>Encendida</dt><dd id="uptime">–</dd></div>
-          <div><dt>Carga</dt><dd id="carga">–</dd></div>
-        </dl>
+        <div class="mac__inferior">
+          <div id="bateria-aro" class="bateria-aro" title="Batería">
+            <svg viewBox="0 0 64 64" width="64" height="64" class="bateria-svg" aria-label="Batería">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5" />
+              <circle id="bateria-arco" cx="32" cy="32" r="26" fill="none" stroke="#3ecf8e" stroke-width="5"
+                stroke-dasharray="163.36" stroke-dashoffset="0" stroke-linecap="round"
+                transform="rotate(-90 32 32)" />
+              <text id="bateria-icono" x="32" y="22" text-anchor="middle" font-size="11" fill="#f5b544" hidden>⚡</text>
+              <text id="bateria-valor" x="32" y="37" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">--%</text>
+            </svg>
+          </div>
+          <span id="bateria" hidden>–</span>
+          <dl class="datos datos--compactos">
+            <div><dt>Encendida</dt><dd id="uptime">–</dd></div>
+            <div><dt>Carga</dt><dd id="carga">–</dd></div>
+          </dl>
+        </div>
       </section>
 
       <section id="tarjeta-control" class="tarjeta" aria-labelledby="t-control">
@@ -116,6 +147,8 @@
           <button id="boton-playpause" class="boton boton--primario" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-playpause"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>
           <button class="boton" type="button" data-accion="media.siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
           <button class="boton" type="button" data-accion="pantalla.apagar">Apagar pantalla</button>
+          <button class="boton" type="button" data-accion="mac.bloquear">🔒 Bloquear</button>
+          <button id="boton-timer" class="boton" type="button">⏱ Temporizador</button>
         </div>
       </section>
 
@@ -154,6 +187,64 @@
           <button id="desemparejar-confirmar" class="boton boton--peligro" type="button">Sí, desemparejar</button>
         </div>
       </div>
+    </div>
+
+    <!-- Modal Temporizador -->
+    <div id="modal-timer" class="recordatorio" role="dialog" aria-labelledby="timer-modal-titulo" hidden>
+      <div class="recordatorio__caja modal-timer__caja">
+        <h2 id="timer-modal-titulo">Temporizador</h2>
+        <div id="timer-activo-vista" hidden>
+          <div class="timer-aro-caja">
+            <svg viewBox="0 0 120 120" width="120" height="120" class="timer-svg">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8" />
+              <circle id="timer-arco" cx="60" cy="60" r="50" fill="none" stroke="#5b9dff" stroke-width="8"
+                stroke-dasharray="314.16" stroke-dashoffset="0" stroke-linecap="round"
+                transform="rotate(-90 60 60)" />
+              <text id="timer-cuenta" x="60" y="67" text-anchor="middle" font-size="22" font-weight="600" fill="currentColor">00:00</text>
+            </svg>
+          </div>
+          <div class="fila fila--centrada">
+            <button id="timer-cancelar" class="boton boton--peligro" type="button">Detener</button>
+            <button id="timer-cerrar-activo" class="boton" type="button">Ocultar</button>
+          </div>
+        </div>
+        <div id="timer-config-vista">
+          <p class="tenue">Selecciona un tiempo rápido o ingresa los minutos:</p>
+          <div class="timer-presets">
+            <button class="boton boton--preset" type="button" data-minutos="1">1 min</button>
+            <button class="boton boton--preset" type="button" data-minutos="5">5 min</button>
+            <button class="boton boton--preset" type="button" data-minutos="10">10 min</button>
+            <button class="boton boton--preset" type="button" data-minutos="15">15 min</button>
+            <button class="boton boton--preset" type="button" data-minutos="30">30 min</button>
+          </div>
+          <form id="form-timer-personalizado" class="timer-custom-form">
+            <label class="tenue">Personalizado (minutos)
+              <input id="timer-custom-min" type="number" min="1" max="180" placeholder="Ej. 12" required />
+            </label>
+            <button class="boton boton--primario" type="submit">Iniciar</button>
+          </form>
+          <div class="fila fila--centrada">
+            <button id="timer-cerrar" class="boton" type="button">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nueva Alarma -->
+    <div id="modal-alarma" class="recordatorio" role="dialog" aria-labelledby="alarma-modal-titulo" hidden>
+      <form id="form-alarma" class="recordatorio__caja modal-alarma__caja" autocomplete="off">
+        <h2 id="alarma-modal-titulo">Nueva Alarma</h2>
+        <label>Hora
+          <input id="campo-alarma-hora" type="time" required />
+        </label>
+        <label>Título
+          <input id="campo-alarma-titulo" type="text" placeholder="Ej. Despertar, Reunión…" required />
+        </label>
+        <div class="fila fila--centrada">
+          <button id="alarma-cancelar" class="boton" type="button">Cancelar</button>
+          <button class="boton boton--primario" type="submit">Guardar</button>
+        </div>
+      </form>
     </div>
 
     <div id="noche" class="noche" hidden><div id="noche-hora" class="noche__hora"></div></div>

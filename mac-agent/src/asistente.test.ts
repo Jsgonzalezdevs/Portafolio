@@ -202,3 +202,61 @@ test('herramientas de agenda: solo existen si hay agenda, y crean con los argume
   assert.deepEqual(creados, [['Sacar la basura', '2026-11-11T20:00']]);
   assert.deepEqual(r.acciones, [{ herramienta: 'agenda.crear_recordatorio', ok: true, mensaje: 'Recordatorio «Sacar la basura» creado' }]);
 });
+
+test('herramienta bloquear_mac ejecuta mac.bloquear', async () => {
+  const { asistente, llamadas } = montar([
+    mensaje('tool_use', [herramienta('t_bloq', 'bloquear_mac', {})]),
+    mensaje('end_turn', [texto('Mac bloqueada.')]),
+  ]);
+  const r = await asistente.conversar('bloquea la mac');
+  assert.equal(r.respuesta, 'Mac bloqueada.');
+  assert.deepEqual(r.acciones, [{ herramienta: 'mac.bloquear', ok: true, mensaje: 'Mac bloqueada' }]);
+  assert.deepEqual(llamadas, [['pmset', 'displaysleepnow']]);
+});
+
+test('herramientas de alarmas: solo existen si hay alarmas, y operan sobre GestorAlarmas', async () => {
+  const sinAlarmas = montar([mensaje('end_turn', [texto('ok')])]);
+  await sinAlarmas.asistente.conversar('hola');
+  assert.ok(!sinAlarmas.peticiones[0].tools?.some((t) => 'name' in t && t.name === 'crear_alarma'));
+
+  const alarmasFalsas: import('./alarmas.ts').Alarma[] = [
+    { id: 'alm-1', hora: '07:00', dias: [1, 2, 3], titulo: 'Gimnasio', activa: true },
+  ];
+  const gestorMock = {
+    listar: () => alarmasFalsas,
+    crear: (hora: string, titulo: string, dias?: number[]) => {
+      const a = { id: 'alm-2', hora, dias: dias ?? [], titulo, activa: true };
+      alarmasFalsas.push(a);
+      return a;
+    },
+    eliminar: (id: string) => {
+      const idx = alarmasFalsas.findIndex((a) => a.id === id);
+      if (idx === -1) return false;
+      alarmasFalsas.splice(idx, 1);
+      return true;
+    },
+    toggle: () => alarmasFalsas[0],
+    vencidas: () => [],
+  } as unknown as import('./alarmas.ts').GestorAlarmas;
+
+  const g = guion([
+    mensaje('tool_use', [
+      herramienta('c1', 'crear_alarma', { hora: '08:30', titulo: 'Despertar', dias: [1, 2, 3, 4, 5] }),
+      herramienta('c2', 'listar_alarmas', {}),
+      herramienta('c3', 'eliminar_alarma', { id: 'alm-1' }),
+    ]),
+    mensaje('end_turn', [texto('Alarmas gestionadas.')]),
+  ]);
+  const a = new Asistente({
+    config,
+    acciones: crearAcciones(config, async () => ''),
+    leerEstado: async () => ({}) as EstadoMac,
+    crearMensaje: g.crear,
+    alarmas: gestorMock,
+  });
+  const r = await a.conversar('pon alarma a las 8:30');
+  assert.ok(g.peticiones[0].tools?.some((t) => 'name' in t && t.name === 'crear_alarma'));
+  assert.equal(r.respuesta, 'Alarmas gestionadas.');
+  assert.equal(alarmasFalsas.length, 1);
+  assert.equal(alarmasFalsas[0].id, 'alm-2');
+});

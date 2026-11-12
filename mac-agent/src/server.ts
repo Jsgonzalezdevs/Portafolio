@@ -1,23 +1,27 @@
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { crearAcciones, ErrorDeAccion } from './acciones.ts';
-import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts';
-import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
-import { cargarClaveAnthropic, cargarClaveGroq, cargarConfig, RAIZ, type Config } from './config.ts';
-import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
-import { Publicador } from './publicador.ts';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
+import { crearAcciones, ErrorDeAccion } from './acciones.ts';
+import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
+import { GestorAlarmas, type Alarma } from './alarmas.ts';
+import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts';
+import { cargarClaveAnthropic, cargarClaveGroq, cargarConfig, RAIZ, type Config } from './config.ts';
 import { ejecutar } from './ejecutor.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
+import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
+import { Publicador } from './publicador.ts';
 
 interface Dependencias {
   config: Config;
-  monitor: Pick<Monitor, 'leer'>;
+  monitor: Pick<Monitor, 'leer'> & Partial<Pick<Monitor, 'leerFondo'>>;
   acciones: ReturnType<typeof crearAcciones>;
   asistente?: Pick<Asistente, 'conversar'>;
   agenda?: Agenda;
   avisador?: Pick<Avisador, 'pendientes' | 'descartar' | 'olvidarPermiso'>;
+  gestorAlarmas?: GestorAlarmas;
   log?: (linea: string) => void;
   intervaloMs?: number;
 }
@@ -26,6 +30,22 @@ const MAX_CUERPO = 16 * 1024;
 const MAX_FALLOS = 10;
 const VENTANA_FALLOS_MS = 60_000;
 
+function tipoContenidoImagen(ruta: string): string {
+  const ext = extname(ruta).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.heic') return 'image/heic';
+  if (ext === '.webp') return 'image/webp';
+  return 'application/octet-stream';
+}
+
+function calcularSaludo(fecha: Date): string {
+  const h = fecha.getHours();
+  if (h >= 6 && h < 12) return 'Buenos días';
+  if (h >= 12 && h < 18) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
 export function crearServidor({
   config,
   monitor,
@@ -33,6 +53,7 @@ export function crearServidor({
   asistente,
   agenda,
   avisador,
+  gestorAlarmas,
   log = console.log,
   intervaloMs = 3000,
 }: Dependencias): Server {
@@ -40,6 +61,26 @@ export function crearServidor({
   const fallos = new Map<string, { n: number; hasta: number }>();
   const suscriptores = new Set<ServerResponse>();
   let temporizador: NodeJS.Timeout | undefined;
+
+  let alarmasActivas: Alarma[] = [];
+  const revisarAlarmas = () => {
+    if (gestorAlarmas) {
+      alarmasActivas = gestorAlarmas.vencidas();
+    }
+  };
+  revisarAlarmas();
+
+  let intervaloAlarmas: NodeJS.Timeout | undefined;
+  if (gestorAlarmas) {
+    intervaloAlarmas = setInterval(() => {
+      const previas = alarmasActivas.length;
+      revisarAlarmas();
+      if ((alarmasActivas.length > 0 || previas > 0) && suscriptores.size) {
+        void muestrear();
+      }
+    }, 30_000);
+    intervaloAlarmas.unref();
+  }
 
   const ipDe = (req: IncomingMessage) => {
     const local = req.socket.remoteAddress;
@@ -84,8 +125,15 @@ export function crearServidor({
       req.on('error', reject);
     });
 
-  /** El estado lleva además los avisos de recordatorios vencidos. */
-  const leerEstado = async () => ({ ...(await monitor.leer()), avisos: avisador?.pendientes ?? [] });
+  /** El estado lleva además los avisos de recordatorios vencidos y las alarmas activas cuando suenan. */
+  const leerEstado = async () => {
+    if (gestorAlarmas) revisarAlarmas();
+    return {
+      ...(await monitor.leer()),
+      avisos: avisador?.pendientes ?? [],
+      ...(alarmasActivas.length > 0 ? { alarmasActivas } : {}),
+    };
+  };
 
   const emitir = (estado: EstadoMac) => {
     const datos = `event: estado\ndata: ${JSON.stringify(estado)}\n\n`;
@@ -208,6 +256,142 @@ export function crearServidor({
         return json(res, 404, { error: 'Ruta no encontrada' });
       }
 
+      if (req.method === 'GET' && url.pathname === '/fondo') {
+        const ruta = monitor.leerFondo ? await monitor.leerFondo() : null;
+        if (!ruta) return json(res, 404, { error: 'Fondo no encontrado' });
+        try {
+          let buffer: Buffer;
+          let tipo: string;
+
+          if (ruta.toLowerCase().endsWith('.heic')) {
+            // Chrome/WebView en Android no decodifica HEIC; se convierte a JPEG con sips (nativo de macOS)
+            const cacheJpg = join(RAIZ, '.fondo-cache.jpg');
+            try {
+              const statHeic = statSync(ruta);
+              const statCache = existsSync(cacheJpg) ? statSync(cacheJpg) : null;
+              if (!statCache || statCache.mtimeMs < statHeic.mtimeMs) {
+                await ejecutar('sips', ['-Z', '1280', '-s', 'format', 'jpeg', ruta, '--out', cacheJpg]);
+              }
+              buffer = await readFile(cacheJpg);
+              tipo = 'image/jpeg';
+            } catch {
+              buffer = await readFile(ruta);
+              tipo = 'image/heic';
+            }
+          } else {
+            buffer = await readFile(ruta);
+            tipo = tipoContenidoImagen(ruta);
+          }
+
+          res.writeHead(200, {
+            'Content-Type': tipo,
+            'Content-Length': buffer.length,
+            'Cache-Control': 'max-age=60',
+            ...(origen ? {} : { 'Access-Control-Allow-Origin': '*' }),
+          });
+          return res.end(buffer);
+        } catch {
+          return json(res, 404, { error: 'Archivo de fondo no encontrado' });
+        }
+      }
+
+      if (req.method === 'GET' && url.pathname === '/resumen') {
+        const ahora = new Date();
+        const estado = await monitor.leer();
+        const clima = estado.clima ?? null;
+
+        let eventosHoy: unknown[] = [];
+        let recordatoriosPendientes: unknown[] = [];
+        if (agenda) {
+          try {
+            const permisos = await agenda.permisos();
+            const hoyInicio = new Date(ahora);
+            hoyInicio.setHours(0, 0, 0, 0);
+            const hoyFin = new Date(ahora);
+            hoyFin.setHours(23, 59, 59, 999);
+            const [evs, recs] = await Promise.all([
+              permisos.calendario === 'concedido' ? agenda.eventos(fechaLocal(hoyInicio), fechaLocal(hoyFin)) : [],
+              permisos.recordatorios === 'concedido' ? agenda.recordatorios() : [],
+            ]);
+            eventosHoy = evs;
+            recordatoriosPendientes = recs;
+          } catch {
+            // Continúa con listas vacías si la agenda falla
+          }
+        }
+
+        const diaHoy = ahora.getDay();
+        const alarmasHoy = gestorAlarmas
+          ? gestorAlarmas
+              .listar()
+              .filter((a) => a.activa && (a.dias.length === 0 || a.dias.includes(diaHoy)))
+              .sort((a, b) => a.hora.localeCompare(b.hora))
+          : [];
+
+        const saludo = calcularSaludo(ahora);
+        const hh = String(ahora.getHours()).padStart(2, '0');
+        const mm = String(ahora.getMinutes()).padStart(2, '0');
+        const hora = `${hh}:${mm}`;
+
+        return json(res, 200, {
+          clima,
+          eventosHoy,
+          recordatoriosPendientes,
+          alarmasHoy,
+          saludo,
+          hora,
+        });
+      }
+
+      if (url.pathname === '/alarmas' || url.pathname.startsWith('/alarmas/')) {
+        if (req.method === 'GET' && url.pathname === '/alarmas') {
+          return json(res, 200, { alarmas: gestorAlarmas ? gestorAlarmas.listar() : [] });
+        }
+
+        if (!gestorAlarmas) return json(res, 503, { error: 'Gestor de alarmas no configurado' });
+
+        if (req.method === 'POST' && url.pathname === '/alarmas') {
+          const cuerpo = await leerCuerpo(req);
+          if (typeof cuerpo.hora !== 'string' || typeof cuerpo.titulo !== 'string') {
+            return json(res, 400, { error: 'hora y titulo son requeridos' });
+          }
+          const dias = Array.isArray(cuerpo.dias) ? (cuerpo.dias as number[]) : undefined;
+          try {
+            const alarma = gestorAlarmas.crear(cuerpo.hora, cuerpo.titulo, dias);
+            revisarAlarmas();
+            if (suscriptores.size) void muestrear();
+            return json(res, 200, { alarma });
+          } catch (e) {
+            return json(res, 400, { error: (e as Error).message });
+          }
+        }
+
+        const mToggleAlarma = /^\/alarmas\/([^/]+)\/toggle$/.exec(url.pathname);
+        if (req.method === 'POST' && mToggleAlarma) {
+          const id = decodeURIComponent(mToggleAlarma[1]);
+          try {
+            const alarma = gestorAlarmas.toggle(id);
+            revisarAlarmas();
+            if (suscriptores.size) void muestrear();
+            return json(res, 200, { alarma });
+          } catch {
+            return json(res, 404, { error: 'Alarma no encontrada' });
+          }
+        }
+
+        const mEliminarAlarma = /^\/alarmas\/([^/]+)$/.exec(url.pathname);
+        if (req.method === 'DELETE' && mEliminarAlarma) {
+          const id = decodeURIComponent(mEliminarAlarma[1]);
+          const ok = gestorAlarmas.eliminar(id);
+          if (!ok) return json(res, 404, { error: 'Alarma no encontrada' });
+          revisarAlarmas();
+          if (suscriptores.size) void muestrear();
+          return json(res, 200, { ok: true });
+        }
+
+        return json(res, 404, { error: 'Ruta no encontrada' });
+      }
+
       if (req.method === 'POST' && url.pathname === '/chat') {
         if (!asistente) return json(res, 503, { error: 'El asistente no está activado en este agente' });
         const { texto, nueva } = await leerCuerpo(req);
@@ -239,6 +423,7 @@ export function crearServidor({
   });
 
   servidor.on('close', () => {
+    if (intervaloAlarmas) clearInterval(intervaloAlarmas);
     for (const res of suscriptores) res.end();
     suscriptores.clear();
     detenerSiNadie();
@@ -254,6 +439,7 @@ if (import.meta.main) {
   const acciones = crearAcciones(config, ejecutar);
   const agenda = agendaInstalada(RAIZ, ejecutar);
   const avisador = agenda ? new Avisador(agenda) : undefined;
+  const gestorAlarmas = new GestorAlarmas(RAIZ);
   if (!agenda) log('agenda no instalada (falta «Agenda del asistente.app»): sin calendario ni recordatorios');
   // Proveedor del chat: con `auto`, basta con que exista la llave de Groq para usarlo.
   const claveGroq = cargarClaveGroq();
@@ -275,10 +461,12 @@ if (import.meta.main) {
     acciones,
     agenda,
     avisador,
+    gestorAlarmas,
     asistente: new Asistente({
       config,
       acciones,
       agenda,
+      alarmas: gestorAlarmas,
       leerEstado: () => monitor.leer(),
       crearMensaje,
       log,

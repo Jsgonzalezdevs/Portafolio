@@ -63,7 +63,11 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
   puerto: 8787,
   host: '127.0.0.1',
   origenes: ['https://juliangonzalez.lat', 'https://www.juliangonzalez.lat', 'http://localhost:5173'],
-  escenas: [],
+  escenas: [
+    { id: 'trabajo', nombre: 'Modo Trabajo', atajo: 'Modo Trabajo' },
+    { id: 'buenas-noches', nombre: 'Buenas Noches', atajo: 'Buenas Noches' },
+    { id: 'cine', nombre: 'Modo Cine', atajo: 'Modo Cine' },
+  ],
   apps: [],
   asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
 };

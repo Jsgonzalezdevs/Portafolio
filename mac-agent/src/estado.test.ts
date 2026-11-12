@@ -84,3 +84,24 @@ test('clima: parsea formato wttr.in en español', () => {
   assert.equal(parsearClima('<html>502 Bad Gateway</html>'), null);
   assert.equal(parsearClima(''), null);
 });
+
+test('Monitor.leerFondo: lee ruta con osascript y la almacena en caché', async () => {
+  const { Monitor } = await import('./estado.ts');
+  let llamadas = 0;
+  const monitor = new Monitor(async (bin, args) => {
+    llamadas++;
+    if (bin === 'osascript' && args[1].includes('desktop picture as text')) {
+      return '/Library/Desktop Pictures/Solid Colors/Stone.png\n';
+    }
+    return '';
+  });
+
+  const ruta1 = await monitor.leerFondo();
+  assert.equal(ruta1, '/Library/Desktop Pictures/Solid Colors/Stone.png');
+  assert.equal(llamadas, 1);
+
+  // Segunda llamada inmediata usa caché (no llama a osascript de nuevo)
+  const ruta2 = await monitor.leerFondo();
+  assert.equal(ruta2, '/Library/Desktop Pictures/Solid Colors/Stone.png');
+  assert.equal(llamadas, 1);
+});

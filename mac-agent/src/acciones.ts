@@ -91,6 +91,13 @@ export function crearAcciones(config: Pick<Config, 'escenas' | 'apps'>, run: Eje
         return 'Pantalla apagada';
       },
     },
+    'mac.bloquear': {
+      descripcion: 'Bloquea la Mac (apaga pantalla y pide contraseña al despertar)',
+      ejecutar: async () => {
+        await run('pmset', ['displaysleepnow']);
+        return 'Mac bloqueada';
+      },
+    },
     'app.abrir': {
       descripcion: 'Abre una app de la lista permitida',
       ejecutar: async (p) => {

@@ -172,6 +172,7 @@ export class Monitor {
   private bateria: { valor: Bateria | null; en: number } = { valor: null, en: 0 };
   private reproductor: { valor: Reproductor | null; en: number } = { valor: null, en: 0 };
   private clima: { valor: Clima | null; en: number } = { valor: null, en: 0 };
+  private fondo: { valor: string | null; en: number } = { valor: null, en: 0 };
   private readonly ejecutar: Ejecutor;
 
   constructor(ejecutar: Ejecutor) {
@@ -192,6 +193,52 @@ export class Monitor {
     } catch {
       return respaldo;
     }
+  }
+
+  private async obtenerRutaFondo(): Promise<string | null> {
+    const scripts = [
+      'tell application "System Events" to get POSIX path of (desktop picture as text)',
+      'tell app "Finder" to get POSIX path of (desktop picture as alias)',
+      'tell application "System Events" to tell every desktop to get picture as text',
+    ];
+    for (const script of scripts) {
+      try {
+        const salida = (await this.ejecutar('osascript', ['-e', script])).trim();
+        if (!salida || salida === 'missing value') continue;
+        const partes = salida.split(',');
+        for (const parte of partes) {
+          const ruta = parte.trim();
+          if (ruta && ruta !== 'missing value') {
+            return ruta;
+          }
+        }
+      } catch {
+        // Ignora y prueba el siguiente script
+      }
+    }
+
+    // Fallbacks para macOS donde el fondo es dinámico o un video Aerial:
+    const candidatos = [
+      '/System/Library/Desktop Pictures/Sonoma.heic',
+      '/System/Library/CoreServices/DefaultDesktop.heic',
+      '/System/Library/Desktop Pictures/Mac Blue.heic',
+      '/System/Library/Desktop Pictures/Radial Sky Blue.heic',
+    ];
+    for (const c of candidatos) {
+      if (existsSync(c)) return c;
+    }
+
+    return null;
+  }
+
+  async leerFondo(): Promise<string | null> {
+    if (Date.now() - this.fondo.en > 60_000) {
+      this.fondo = {
+        valor: await this.obtenerRutaFondo(),
+        en: Date.now(),
+      };
+    }
+    return this.fondo.valor;
   }
 
   async leer(): Promise<EstadoMac> {

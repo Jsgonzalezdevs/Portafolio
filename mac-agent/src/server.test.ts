@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { crearAcciones } from './acciones.ts';
+import { GestorAlarmas } from './alarmas.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
 import { crearServidor } from './server.ts';
@@ -174,6 +178,180 @@ test('/agenda: 404 sin agenda; con agenda devuelve permisos, eventos y recordato
   assert.deepEqual(descartados, ['r/1']);
   assert.deepEqual(completados, ['r/1']);
   s.close();
+});
+
+test('GET /fondo: 401 sin auth, 404 si no hay fondo, 200 con imagen y cabeceras correctas', async () => {
+  const tmpCarpeta = mkdtempSync(join(tmpdir(), 'fondo-test-'));
+  const rutaFondo = join(tmpCarpeta, 'fondo.png');
+  const bufferEsperado = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  writeFileSync(rutaFondo, bufferEsperado);
+
+  let rutaFondoConfigurada: string | null = null;
+  const s = crearServidor({
+    config,
+    monitor: {
+      leer: async () => estadoFalso,
+      leerFondo: async () => rutaFondoConfigurada,
+    },
+    acciones: crearAcciones(config, async () => ''),
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+
+  try {
+    // 401 sin token
+    assert.equal((await fetch(`${b}/fondo`)).status, 401);
+
+    // 404 si leerFondo devuelve null
+    const r404 = await fetch(`${b}/fondo`, { headers: auth });
+    assert.equal(r404.status, 404);
+    assert.deepEqual(await r404.json(), { error: 'Fondo no encontrado' });
+
+    // 404 si el archivo no existe en disco
+    rutaFondoConfigurada = join(tmpCarpeta, 'no-existe.jpg');
+    const rNoExiste = await fetch(`${b}/fondo`, { headers: auth });
+    assert.equal(rNoExiste.status, 404);
+
+    // 200 con archivo real
+    rutaFondoConfigurada = rutaFondo;
+    const r200 = await fetch(`${b}/fondo`, { headers: auth });
+    assert.equal(r200.status, 200);
+    assert.equal(r200.headers.get('content-type'), 'image/png');
+    assert.equal(r200.headers.get('cache-control'), 'max-age=60');
+    assert.ok(r200.headers.get('access-control-allow-origin'));
+    const arrayBuffer = await r200.arrayBuffer();
+    assert.deepEqual(Buffer.from(arrayBuffer), bufferEsperado);
+  } finally {
+    s.close();
+    rmSync(tmpCarpeta, { recursive: true, force: true });
+  }
+});
+
+test('alarmas: endpoints CRUD (GET, POST, toggle, DELETE)', async () => {
+  const tmpCarpeta = mkdtempSync(join(tmpdir(), 'alarmas-server-test-'));
+  const gestor = new GestorAlarmas(tmpCarpeta);
+
+  const s = crearServidor({
+    config,
+    monitor: { leer: async () => estadoFalso },
+    acciones: crearAcciones(config, async () => ''),
+    gestorAlarmas: gestor,
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+
+  try {
+    // 401 sin token
+    assert.equal((await fetch(`${b}/alarmas`)).status, 401);
+
+    // GET /alarmas vacío
+    const r1 = await fetch(`${b}/alarmas`, { headers: auth });
+    assert.equal(r1.status, 200);
+    assert.deepEqual(await r1.json(), { alarmas: [] });
+
+    // POST /alarmas datos inválidos
+    const rInvalido = await fetch(`${b}/alarmas`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hora: '99:99' }),
+    });
+    assert.equal(rInvalido.status, 400);
+
+    // POST /alarmas creación exitosa
+    const rCrear = await fetch(`${b}/alarmas`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hora: '06:45', titulo: 'Levantarse', dias: [1, 2, 3, 4, 5] }),
+    });
+    assert.equal(rCrear.status, 200);
+    const cuerpoCrear = (await rCrear.json()) as { alarma: import('./alarmas.ts').Alarma };
+    assert.equal(cuerpoCrear.alarma.hora, '06:45');
+    assert.equal(cuerpoCrear.alarma.titulo, 'Levantarse');
+    assert.equal(cuerpoCrear.alarma.activa, true);
+    const id = cuerpoCrear.alarma.id;
+
+    // GET /alarmas con 1 alarma
+    const rListar = await fetch(`${b}/alarmas`, { headers: auth });
+    const cuerpoListar = (await rListar.json()) as { alarmas: import('./alarmas.ts').Alarma[] };
+    assert.equal(cuerpoListar.alarmas.length, 1);
+    assert.equal(cuerpoListar.alarmas[0].id, id);
+
+    // POST /alarmas/:id/toggle
+    const rToggle = await fetch(`${b}/alarmas/${id}/toggle`, { method: 'POST', headers: auth });
+    assert.equal(rToggle.status, 200);
+    const cuerpoToggle = (await rToggle.json()) as { alarma: import('./alarmas.ts').Alarma };
+    assert.equal(cuerpoToggle.alarma.activa, false);
+
+    // POST /alarmas/:id/toggle con id inexistente
+    const rToggleInexistente = await fetch(`${b}/alarmas/inexistente/toggle`, { method: 'POST', headers: auth });
+    assert.equal(rToggleInexistente.status, 404);
+
+    // DELETE /alarmas/:id
+    const rDel = await fetch(`${b}/alarmas/${id}`, { method: 'DELETE', headers: auth });
+    assert.equal(rDel.status, 200);
+    assert.deepEqual(await rDel.json(), { ok: true });
+
+    // DELETE /alarmas/:id repetido → 404
+    const rDel2 = await fetch(`${b}/alarmas/${id}`, { method: 'DELETE', headers: auth });
+    assert.equal(rDel2.status, 404);
+  } finally {
+    s.close();
+    rmSync(tmpCarpeta, { recursive: true, force: true });
+  }
+});
+
+test('GET /resumen: devuelve saludo, hora, clima, eventos, recordatorios y alarmas', async () => {
+  const tmpCarpeta = mkdtempSync(join(tmpdir(), 'resumen-server-test-'));
+  const gestor = new GestorAlarmas(tmpCarpeta);
+  gestor.crear('08:00', 'Alarma de hoy'); // dias: [] significa todos los días
+
+  const s = crearServidor({
+    config,
+    monitor: {
+      leer: async () => ({
+        ...estadoFalso,
+        clima: { ciudad: 'Bogotá', tempC: 19, condicion: 'Nublado', icono: '☁️' },
+      }),
+    },
+    acciones: crearAcciones(config, async () => ''),
+    gestorAlarmas: gestor,
+    agenda: {
+      permisos: async () => ({ calendario: 'concedido', recordatorios: 'concedido' }),
+      eventos: async () => [{ titulo: 'Reunión de equipo', inicio: '2026-11-12T09:00', fin: '2026-11-12T10:00' }],
+      recordatorios: async () => [{ id: 'rec-1', titulo: 'Comprar café', vence: null, lista: 'Hogar' }],
+    } as unknown as import('./agenda.ts').Agenda,
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+
+  try {
+    assert.equal((await fetch(`${b}/resumen`)).status, 401);
+
+    const r = await fetch(`${b}/resumen`, { headers: auth });
+    assert.equal(r.status, 200);
+    const resumen = (await r.json()) as {
+      clima: { ciudad: string; tempC: number; condicion: string; icono: string };
+      eventosHoy: unknown[];
+      recordatoriosPendientes: unknown[];
+      alarmasHoy: import('./alarmas.ts').Alarma[];
+      saludo: string;
+      hora: string;
+    };
+
+    assert.equal(resumen.clima.ciudad, 'Bogotá');
+    assert.equal(resumen.eventosHoy.length, 1);
+    assert.equal(resumen.recordatoriosPendientes.length, 1);
+    assert.equal(resumen.alarmasHoy.length, 1);
+    assert.equal(resumen.alarmasHoy[0].titulo, 'Alarma de hoy');
+    assert.ok(['Buenos días', 'Buenas tardes', 'Buenas noches'].includes(resumen.saludo));
+    assert.match(resumen.hora, /^\d{2}:\d{2}$/);
+  } finally {
+    s.close();
+    rmSync(tmpCarpeta, { recursive: true, force: true });
+  }
 });
 
 // Va al final: deja 127.0.0.1 bloqueado un minuto para el resto del archivo.

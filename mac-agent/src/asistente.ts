@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import type { crearAcciones } from './acciones.ts';
 import { resumirEventos, type Agenda } from './agenda.ts';
+import type { GestorAlarmas } from './alarmas.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
 
@@ -60,6 +61,8 @@ interface Dependencias {
   crearMensaje: CrearMensaje;
   /** Calendario y Recordatorios de macOS; sin ella, Claude no recibe esas herramientas. */
   agenda?: Agenda;
+  /** Gestor de alarmas de la tablet / Mac. */
+  alarmas?: GestorAlarmas;
   ahora?: () => Date;
   log?: (linea: string) => void;
 }
@@ -112,9 +115,39 @@ const HERRAMIENTAS_AGENDA: Anthropic.Beta.BetaTool[] = [
   },
 ];
 
+const HERRAMIENTAS_ALARMAS: Anthropic.Beta.BetaTool[] = [
+  {
+    name: 'crear_alarma',
+    description: 'Crea una nueva alarma. hora es HH:MM (24h). dias es opcional (0=domingo..6=sábado; si se omite suena todos los días).',
+    input_schema: objeto(
+      {
+        hora: { type: 'string', description: 'Hora en formato HH:MM (24 horas, p. ej. 07:30)' },
+        titulo: { type: 'string', description: 'Título o motivo de la alarma' },
+        dias: {
+          type: 'array',
+          items: { type: 'integer' },
+          description: 'Días de la semana en que suena (0=domingo, 1=lunes... 6=sábado). Vacío = todos los días.',
+        },
+      },
+      ['hora', 'titulo'],
+    ),
+  },
+  {
+    name: 'listar_alarmas',
+    description: 'Lista todas las alarmas configuradas (activas e inactivas) con su id, hora, días y título.',
+    input_schema: objeto({}, []),
+  },
+  {
+    name: 'eliminar_alarma',
+    description: 'Elimina una alarma por su id.',
+    input_schema: objeto({ id: { type: 'string', description: 'Identificador único de la alarma' } }, ['id']),
+  },
+];
+
 export function construirHerramientas(
   config: Pick<Config, 'escenas' | 'apps'>,
   conAgenda = false,
+  conAlarmas = false,
 ): Anthropic.Beta.BetaTool[] {
   const herramientas: Anthropic.Beta.BetaTool[] = [
     {
@@ -142,6 +175,11 @@ export function construirHerramientas(
       description: 'Apaga la pantalla de la Mac (y la bloquea si pide contraseña al despertar).',
       input_schema: objeto({}, []),
     },
+    {
+      name: 'bloquear_mac',
+      description: 'Bloquea la Mac (apaga pantalla y pide contraseña al despertar).',
+      input_schema: objeto({}, []),
+    },
   ];
   if (config.apps.length) {
     herramientas.push({
@@ -161,6 +199,7 @@ export function construirHerramientas(
     });
   }
   if (conAgenda) herramientas.push(...HERRAMIENTAS_AGENDA);
+  if (conAlarmas) herramientas.push(...HERRAMIENTAS_ALARMAS);
   return herramientas.map((h) => ({ ...h, strict: true }));
 }
 
@@ -224,7 +263,7 @@ export class Asistente {
 
   constructor(deps: Dependencias) {
     this.deps = deps;
-    this.herramientas = construirHerramientas(deps.config, Boolean(deps.agenda));
+    this.herramientas = construirHerramientas(deps.config, Boolean(deps.agenda), Boolean(deps.alarmas));
     this.ahora = deps.ahora ?? (() => new Date());
     this.log = deps.log ?? (() => {});
   }
@@ -247,6 +286,8 @@ export class Asistente {
     if (uso.name === 'leer_estado_mac') return { texto: describirEstado(await this.deps.leerEstado()), error: false };
     const agenda = await this.usarAgenda(uso.name, entrada);
     if (agenda) return agenda;
+    const alarmas = await this.usarAlarmas(uso.name, entrada);
+    if (alarmas) return alarmas;
 
     const ORDENES: Record<string, string> = {
       reproducir_pausar: 'media.playpause',
@@ -258,6 +299,7 @@ export class Asistente {
       silenciar: () => ['volumen.silenciar', { silenciar: entrada.silenciar }],
       controlar_musica: () => (ORDENES[String(entrada.orden)] ? [ORDENES[String(entrada.orden)], {}] : null),
       apagar_pantalla_mac: () => ['pantalla.apagar', {}],
+      bloquear_mac: () => ['mac.bloquear', {}],
       abrir_app: () => ['app.abrir', { id: entrada.id }],
       ejecutar_escena: () => ['escena.ejecutar', { id: entrada.id }],
     };
@@ -325,6 +367,45 @@ export class Asistente {
         case 'completar_recordatorio': {
           const r = await agenda.completarRecordatorio(str(e.id));
           return { texto: JSON.stringify(r), error: false, registro: registro(`«${r.titulo}» completado`) };
+        }
+      }
+    } catch (err) {
+      const mensaje = (err as Error).message;
+      return { texto: `Falló: ${mensaje}`, error: true, registro: registro(mensaje, false) };
+    }
+    return null;
+  }
+
+  /** Herramientas de alarmas: null si la herramienta no es de alarmas. */
+  private async usarAlarmas(
+    nombre: string,
+    e: Record<string, unknown>,
+  ): Promise<{ texto: string; error: boolean; registro?: AccionRealizada } | null> {
+    const gestor = this.deps.alarmas;
+    if (!gestor || !HERRAMIENTAS_ALARMAS.some((h) => h.name === nombre)) return null;
+    const registro = (mensaje: string, ok = true): AccionRealizada => ({ herramienta: `alarmas.${nombre}`, ok, mensaje });
+    try {
+      switch (nombre) {
+        case 'listar_alarmas': {
+          const lista = gestor.listar();
+          return { texto: JSON.stringify(lista), error: false };
+        }
+        case 'crear_alarma': {
+          const hora = String(e.hora ?? '');
+          const titulo = String(e.titulo ?? '');
+          const dias = Array.isArray(e.dias) ? (e.dias as number[]) : undefined;
+          const r = gestor.crear(hora, titulo, dias);
+          this.log(`ia → alarma «${r.titulo}» a las ${r.hora}`);
+          return { texto: JSON.stringify(r), error: false, registro: registro(`Alarma «${r.titulo}» creada para las ${r.hora}`) };
+        }
+        case 'eliminar_alarma': {
+          const id = String(e.id ?? '');
+          const ok = gestor.eliminar(id);
+          if (!ok) {
+            return { texto: 'Alarma no encontrada', error: true, registro: registro('Alarma no encontrada', false) };
+          }
+          this.log(`ia → alarma ${id} eliminada`);
+          return { texto: 'Alarma eliminada', error: false, registro: registro('Alarma eliminada') };
         }
       }
     } catch (err) {
