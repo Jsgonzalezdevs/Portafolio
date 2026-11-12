@@ -3,13 +3,14 @@ import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { extname, join } from 'node:path';
+import { join } from 'node:path';
 import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
 import { GestorAlarmas, type Alarma } from './alarmas.ts';
 import { Asistente, crearClienteClaude, ErrorDeAsistente } from './asistente.ts';
 import { cargarClaveAnthropic, cargarClaveGroq, cargarConfig, RAIZ, type Config } from './config.ts';
 import { ejecutar } from './ejecutor.ts';
+import { fondoInstalado, type Fondo } from './fondo.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
 import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
 import { Publicador } from './publicador.ts';
@@ -22,6 +23,7 @@ interface Dependencias {
   agenda?: Agenda;
   avisador?: Pick<Avisador, 'pendientes' | 'descartar' | 'olvidarPermiso'>;
   gestorAlarmas?: GestorAlarmas;
+  fondo?: Pick<Fondo, 'firma' | 'imagen'>;
   log?: (linea: string) => void;
   intervaloMs?: number;
 }
@@ -29,15 +31,6 @@ interface Dependencias {
 const MAX_CUERPO = 16 * 1024;
 const MAX_FALLOS = 10;
 const VENTANA_FALLOS_MS = 60_000;
-
-function tipoContenidoImagen(ruta: string): string {
-  const ext = extname(ruta).toLowerCase();
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.heic') return 'image/heic';
-  if (ext === '.webp') return 'image/webp';
-  return 'application/octet-stream';
-}
 
 function calcularSaludo(fecha: Date): string {
   const h = fecha.getHours();
@@ -54,6 +47,7 @@ export function crearServidor({
   agenda,
   avisador,
   gestorAlarmas,
+  fondo,
   log = console.log,
   intervaloMs = 3000,
 }: Dependencias): Server {
@@ -61,6 +55,7 @@ export function crearServidor({
   const fallos = new Map<string, { n: number; hasta: number }>();
   const suscriptores = new Set<ServerResponse>();
   let temporizador: NodeJS.Timeout | undefined;
+  let marcaFondoRespaldo: string | null = null;
 
   let alarmasActivas: Alarma[] = [];
   const revisarAlarmas = () => {
@@ -131,6 +126,8 @@ export function crearServidor({
     return {
       ...(await monitor.leer()),
       avisos: avisador?.pendientes ?? [],
+      // Cuando cambia, el panel vuelve a bajar el fondo de pantalla.
+      fondo: fondo?.firma ?? null,
       ...(alarmasActivas.length > 0 ? { alarmasActivas } : {}),
     };
   };
@@ -161,6 +158,7 @@ export function crearServidor({
       if (!config.origenes.includes(origen)) return json(res, 403, { error: 'Origen no permitido' });
       res.setHeader('Access-Control-Allow-Origin', origen);
       res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Expose-Headers', 'X-Fondo');
     }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -258,41 +256,36 @@ export function crearServidor({
       }
 
       if (req.method === 'GET' && url.pathname === '/fondo') {
+        const enviarImagen = (datos: Buffer, tipo: string) => {
+          res.writeHead(200, { 'Content-Type': tipo, 'Content-Length': datos.length, 'Cache-Control': 'no-store' });
+          res.end(datos);
+        };
+
+        // Lo normal: la mini app, que da el fondo real (también los Aerial) y su versión de vidrio.
+        if (fondo) {
+          const imagen = await fondo.imagen(url.searchParams.get('v') === 'vidrio' ? 'vidrio' : 'fondo');
+          if (!imagen) return json(res, 404, { error: 'Fondo no disponible todavía' });
+          res.setHeader('ETag', `"${imagen.firma}"`);
+          // La firma del fondo que se entrega: el panel la compara con la del estado y no lo baja dos veces.
+          res.setHeader('X-Fondo', fondo.firma ?? '');
+          return enviarImagen(imagen.datos, 'image/jpeg');
+        }
+
+        // Respaldo sin mini app (no se pudo compilar): la imagen que diga el sistema, sin vidrio.
+        if (url.searchParams.get('v') === 'vidrio') return json(res, 404, { error: 'Sin versión de vidrio' });
         const ruta = monitor.leerFondo ? await monitor.leerFondo() : null;
-        if (!ruta) return json(res, 404, { error: 'Fondo no encontrado' });
+        if (!ruta || !existsSync(ruta)) return json(res, 404, { error: 'Fondo no encontrado' });
         try {
-          let buffer: Buffer;
-          let tipo: string;
-
-          if (ruta.toLowerCase().endsWith('.heic')) {
-            // Chrome/WebView en Android no decodifica HEIC; se convierte a JPEG con sips (nativo de macOS)
-            const cacheJpg = join(RAIZ, '.fondo-cache.jpg');
-            try {
-              const statHeic = statSync(ruta);
-              const statCache = existsSync(cacheJpg) ? statSync(cacheJpg) : null;
-              if (!statCache || statCache.mtimeMs < statHeic.mtimeMs) {
-                await ejecutar('sips', ['-Z', '1280', '-s', 'format', 'jpeg', ruta, '--out', cacheJpg]);
-              }
-              buffer = await readFile(cacheJpg);
-              tipo = 'image/jpeg';
-            } catch {
-              buffer = await readFile(ruta);
-              tipo = 'image/heic';
-            }
-          } else {
-            buffer = await readFile(ruta);
-            tipo = tipoContenidoImagen(ruta);
+          // Siempre a JPEG de 1600 px: los originales pueden ser HEIC (que Chrome no abre) o de 6K.
+          const cacheJpg = join(RAIZ, '.fondo-cache.jpg');
+          const marca = `${ruta}|${statSync(ruta).mtimeMs}`;
+          if (marcaFondoRespaldo !== marca || !existsSync(cacheJpg)) {
+            await ejecutar('sips', ['-Z', '1600', '-s', 'format', 'jpeg', ruta, '--out', cacheJpg]);
+            marcaFondoRespaldo = marca;
           }
-
-          res.writeHead(200, {
-            'Content-Type': tipo,
-            'Content-Length': buffer.length,
-            'Cache-Control': 'max-age=60',
-            ...(origen ? {} : { 'Access-Control-Allow-Origin': '*' }),
-          });
-          return res.end(buffer);
+          return enviarImagen(await readFile(cacheJpg), 'image/jpeg');
         } catch {
-          return json(res, 404, { error: 'Archivo de fondo no encontrado' });
+          return json(res, 404, { error: 'No se pudo preparar el fondo' });
         }
       }
 
@@ -463,6 +456,7 @@ if (import.meta.main) {
     agenda,
     avisador,
     gestorAlarmas,
+    fondo: fondoInstalado(RAIZ, ejecutar, log),
     asistente: new Asistente({
       config,
       acciones,

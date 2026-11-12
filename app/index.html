@@ -11,9 +11,10 @@
   </head>
   <body>
     <div id="fondo-mac" aria-hidden="true"></div>
+
     <!-- Emparejamiento: solo la primera vez o si el token deja de valer -->
     <section id="pantalla-emparejar" class="emparejar" hidden>
-      <form id="form-emparejar" class="tarjeta emparejar__caja" autocomplete="off">
+      <form id="form-emparejar" class="tarjeta vidrio emparejar__caja" autocomplete="off">
         <h1>Conectar con la Mac</h1>
         <p class="tenue">Pega el token de tu Mac. La dirección se encuentra sola.</p>
         <label>Dirección (opcional)
@@ -28,140 +29,125 @@
     </section>
 
     <main id="pantalla-panel" class="panel" hidden>
-      <!-- Navegación superior estilo Apple (tabs deslizables) -->
-      <nav class="panel__nav" aria-label="Secciones del panel">
-        <button class="nav-tab nav-tab--activo" type="button" data-pagina="0">
-          <span class="nav-tab__icono">🏠</span>
-          <span class="nav-tab__texto">Inicio</span>
-        </button>
-        <button id="tab-chat" class="nav-tab" type="button" data-pagina="1" hidden>
-          <span class="nav-tab__icono">💬</span>
-          <span class="nav-tab__texto">Asistente</span>
-        </button>
-        <button class="nav-tab" type="button" data-pagina="2">
-          <span class="nav-tab__icono">💻</span>
-          <span class="nav-tab__texto">Mac y Casa</span>
-        </button>
-        <button id="tab-agenda" class="nav-tab" type="button" data-pagina="3" hidden>
-          <span class="nav-tab__icono">📅</span>
-          <span class="nav-tab__texto">Agenda</span>
-        </button>
-      </nav>
+      <!-- Barra de menús, como la de macOS -->
+      <header class="menubar vidrio">
+        <div class="menubar__lado">
+          <span class="menubar__logo"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/></svg></span>
+          <b class="menubar__app">Asistente</b>
+          <span id="menubar-pagina" class="menubar__pagina">Inicio</span>
+        </div>
+        <div class="menubar__lado">
+          <span id="timer-indicador" class="menubar__item menubar__timer" hidden role="button" aria-label="Temporizador activo"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 6.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm.9 7.6h-1.8V9.4h1.8zM9.5 3h5v1.8h-5z"/></svg><span id="timer-indicador-texto">00:00</span></span>
+          <span id="clima" class="menubar__item" hidden>
+            <span id="clima-icono" class="clima__icono">⛅</span>
+            <span id="clima-temp">--°</span>
+            <span id="clima-ciudad" class="menubar__tenue"></span>
+          </span>
+          <span id="menubar-bateria" class="menubar__item" hidden>
+            <span class="pila"><i id="menubar-bateria-nivel"></i></span>
+            <span id="menubar-bateria-valor">--%</span>
+          </span>
+          <span id="conexion" class="menubar__item conexion" data-estado="conectando"><i class="conexion__punto"></i><span id="conexion-texto">Conectando…</span></span>
+          <button id="boton-voz" class="menubar__boton" type="button" hidden>Voz</button>
+          <button id="boton-ajustes" class="menubar__boton" type="button" aria-label="Desemparejar (mantener presionado)"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
+          <span id="menubar-reloj" class="menubar__reloj"></span>
+        </div>
+      </header>
 
-      <!-- Contenedor deslizable horizontalmente con scroll-snap -->
-      <div id="panel-carrusel" class="panel__carrusel">
-        <!-- PÁGINA 1: Inicio (Reloj, Ahora, Control) -->
-        <div class="pagina pagina--inicio" data-indice="0">
-          <header class="panel__reloj">
-            <div id="hora" class="hora">--:--</div>
-            <div class="reloj__subfila">
-              <div id="fecha" class="fecha"></div>
-              <div id="clima" class="clima" hidden>
-                <span id="clima-icono" class="clima__icono">⛅</span>
-                <span id="clima-temp" class="clima__temp">--°</span>
-                <span id="clima-ciudad" class="clima__ciudad tenue"></span>
-              </div>
+      <div id="panel-paginas" class="paginas">
+        <!-- INICIO: reloj sobre el fondo, resumen, alarmas, música y controles -->
+        <section class="pagina pagina--inicio pagina--activa" data-pagina="inicio" data-titulo="Inicio">
+          <div class="columna">
+            <div class="reloj">
+              <div id="fecha" class="reloj__fecha"></div>
+              <div id="hora" class="reloj__hora">--:--</div>
             </div>
-            <div class="barra-estado">
-              <span id="conexion" class="pastilla" data-estado="conectando">Conectando…</span>
-              <span id="timer-indicador" class="pastilla timer-pastilla" hidden role="button" aria-label="Temporizador activo">⏱ <span id="timer-indicador-texto">00:00</span></span>
-              <button id="boton-noche" class="boton boton--icono" type="button" aria-label="Modo noche"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12.3 2a10 10 0 1 0 9.7 12.6A8 8 0 0 1 12.3 2z"/></svg></button>
-              <button id="boton-voz" class="boton boton--chico" type="button" hidden>Voz</button>
-              <button id="boton-ajustes" class="boton boton--icono" type="button" aria-label="Desemparejar (mantener presionado)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
-            </div>
-          </header>
 
-          <div class="pagina__grid">
-            <section id="tarjeta-ahora" class="tarjeta tarjeta--ahora" aria-labelledby="t-ahora">
-              <div class="tarjeta__cabecera">
-                <h2 id="t-ahora" class="ahora__saludo"><span id="ahora-saludo">Buenos días, Julian</span> <span id="ahora-icono">🌅</span></h2>
-                <span id="ahora-badge" class="badge-app tenue">Ahora</span>
-              </div>
-              <p id="ahora-resumen" class="ahora__resumen tenue">Cargando…</p>
-              <div class="ahora__alarmas">
-                <div class="ahora__alarmas-cabecera">
-                  <span class="ahora__subtitulo">Alarmas</span>
-                  <button id="boton-nueva-alarma" class="boton boton--chico" type="button" aria-label="Nueva alarma">+ Alarma</button>
-                </div>
-                <ul id="lista-alarmas" class="lista-alarmas">
-                  <li class="tenue">Sin alarmas hoy</li>
-                </ul>
-              </div>
+            <section id="tarjeta-ahora" class="tarjeta vidrio ahora" aria-labelledby="t-ahora">
+              <h2 id="t-ahora" class="ahora__saludo"><span id="ahora-saludo">Hola</span> <span id="ahora-icono"></span></h2>
+              <p id="ahora-resumen" class="ahora__resumen">Cargando…</p>
             </section>
 
-            <section id="tarjeta-control" class="tarjeta" aria-labelledby="t-control">
+            <section id="tarjeta-alarmas" class="tarjeta vidrio alarmas" aria-labelledby="t-alarmas">
               <div class="tarjeta__cabecera">
-                <h2 id="t-control">Control</h2>
-                <div class="media-cabecera-badges">
-                  <span id="media-dispositivo" class="badge-app badge-dispositivo tenue" hidden>🔊 Bocinas</span>
-                  <span id="media-badge" class="badge-app tenue" hidden>Spotify</span>
-                </div>
+                <h2 id="t-alarmas">Alarmas</h2>
+                <button id="boton-nueva-alarma" class="boton-redondo" type="button" aria-label="Nueva alarma"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
               </div>
-
-              <div id="media-box" class="media-box">
-                <!-- Vista activa con canción -->
-                <div id="media-activo" class="media-activo" hidden>
-                  <div class="media-caratula-caja">
-                    <img id="media-caratula" src="" alt="Portada" class="media-caratula" />
-                  </div>
-                  <div class="media-info">
-                    <p id="media-titulo" class="media-titulo">–</p>
-                    <p id="media-artista" class="media-artista tenue">–</p>
-                    <p id="media-album" class="media-album tenue" hidden></p>
-                  </div>
-                </div>
-
-                <!-- Vista en reposo si no hay música -->
-                <div id="media-reposo" class="media-reposo">
-                  <div class="media-vinilo" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
-                  </div>
-                  <div class="media-info">
-                    <p class="media-titulo">Sin reproducción</p>
-                    <p class="media-artista tenue">Mac en silencio</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Barra de progreso interactiva (scrubbing/seeking) -->
-              <div id="media-progreso-caja" class="media-progreso-caja" hidden>
-                <span id="media-tiempo-actual" class="media-tiempo">0:00</span>
-                <div class="media-progreso-barra-caja">
-                  <input id="media-progreso" type="range" min="0" max="100" value="0" step="1" aria-label="Posición de reproducción" class="media-progreso-slider" />
-                </div>
-                <span id="media-tiempo-total" class="media-tiempo">0:00</span>
-              </div>
-
-              <div class="volumen">
-                <button id="boton-mute" class="boton boton--icono" type="button" aria-label="Silenciar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-vol"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-mute" hidden><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm18.7 1.4-1.4-1.4L18 11.3 15.7 9l-1.4 1.4 2.3 2.3-2.3 2.3 1.4 1.4 2.3-2.3 2.3 2.3 1.4-1.4-2.3-2.3z"/></svg></button>
-                <input id="volumen" type="range" min="0" max="100" step="5" aria-label="Volumen" />
-                <b id="volumen-valor">–</b>
-              </div>
-
-              <div class="fila fila--media-controles">
-                <button class="boton" type="button" data-accion="media.anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
-                <button id="boton-playpause" class="boton boton--primario" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" id="icono-playpause"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>
-                <button class="boton" type="button" data-accion="media.siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
-                <button class="boton" type="button" data-accion="pantalla.apagar">Apagar pantalla</button>
-                <button class="boton" type="button" data-accion="mac.bloquear">🔒 Bloquear</button>
-                <button id="boton-timer" class="boton" type="button">⏱ Temporizador</button>
-              </div>
-
-              <!-- Playlists rápidas / Mezclas de 1 toque -->
-              <div id="media-playlists-seccion" class="media-playlists-seccion" hidden>
-                <span class="media-playlists-titulo tenue">Mezclas rápidas</span>
-                <div id="media-playlists" class="media-playlists-fila">
-                  <!-- Chips renderizados dinámicamente -->
-                </div>
-              </div>
+              <ul id="lista-alarmas" class="lista-alarmas">
+                <li class="lista-alarmas__vacia">Sin alarmas</li>
+              </ul>
             </section>
           </div>
-        </div>
 
-        <!-- PÁGINA 2: Asistente (Chat) -->
-        <div class="pagina pagina--chat" data-indice="1" id="pagina-chat" hidden>
-          <section id="tarjeta-chat" class="tarjeta chat" aria-labelledby="t-chat" hidden>
-            <div class="chat__cabecera">
+          <div class="columna">
+            <section id="tarjeta-control" class="tarjeta vidrio musica" aria-labelledby="t-control">
+              <div id="musica-ambiente" class="musica__ambiente" aria-hidden="true"></div>
+              <div class="tarjeta__cabecera">
+                <h2 id="t-control">Reproduciendo</h2>
+                <div class="musica__insignias">
+                  <span id="media-dispositivo" class="insignia" hidden></span>
+                  <span id="media-badge" class="insignia insignia--app" hidden>Spotify</span>
+                </div>
+              </div>
+
+              <div id="media-box" class="musica__pista">
+                <div id="media-activo" class="musica__fila" hidden>
+                  <div class="musica__caratula"><img id="media-caratula" src="" alt="" /></div>
+                  <div class="musica__info">
+                    <p id="media-titulo" class="musica__titulo">–</p>
+                    <p id="media-artista" class="musica__artista">–</p>
+                    <p id="media-album" class="musica__album" hidden></p>
+                  </div>
+                </div>
+                <div id="media-reposo" class="musica__fila">
+                  <div class="musica__caratula musica__caratula--vacia" aria-hidden="true"><svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M9 3v10.6a3.5 3.5 0 1 0 2 3.2V7h6V3z"/></svg></div>
+                  <div class="musica__info">
+                    <p class="musica__titulo">Sin reproducción</p>
+                    <p class="musica__artista">Pulsa reproducir o elige una mezcla</p>
+                  </div>
+                </div>
+              </div>
+
+              <div id="media-progreso-caja" class="musica__progreso" hidden>
+                <span id="media-tiempo-actual" class="musica__tiempo">0:00</span>
+                <input id="media-progreso" class="rango" type="range" min="0" max="100" value="0" step="1" aria-label="Posición de reproducción" />
+                <span id="media-tiempo-total" class="musica__tiempo">0:00</span>
+              </div>
+
+              <div class="musica__transporte">
+                <button class="musica__boton" type="button" data-accion="media.anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M11.5 12 20 6v12zM3 12l8.5-6v12z"/></svg></button>
+                <button id="boton-playpause" class="musica__boton musica__boton--play" type="button" data-accion="media.playpause" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" id="icono-playpause"><path fill="currentColor" d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/></svg></button>
+                <button class="musica__boton" type="button" data-accion="media.siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12.5 12 4 6v12zM21 12l-8.5-6v12z"/></svg></button>
+              </div>
+
+              <div class="musica__volumen">
+                <button id="boton-mute" class="musica__mute" type="button" aria-label="Silenciar"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" id="icono-vol"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" id="icono-mute" hidden><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm18.7 1.4-1.4-1.4L18 11.3 15.7 9l-1.4 1.4 2.3 2.3-2.3 2.3 1.4 1.4 2.3-2.3 2.3 2.3 1.4-1.4-2.3-2.3z"/></svg></button>
+                <input id="volumen" class="rango" type="range" min="0" max="100" step="5" aria-label="Volumen" />
+                <b id="volumen-valor" class="musica__volumen-valor">–</b>
+              </div>
+
+              <div id="media-playlists-seccion" class="musica__mezclas" hidden>
+                <div id="media-playlists" class="musica__mezclas-fila"></div>
+              </div>
+            </section>
+
+            <section class="tarjeta vidrio accesos" aria-label="Controles de la Mac">
+              <button class="acceso" type="button" data-accion="pantalla.apagar">
+                <span class="acceso__icono"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6.2l.6 2H16v1.5H8V19h1.6l.6-2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
+                <span class="acceso__texto">Apagar pantalla</span>
+              </button>
+              <button class="acceso" type="button" data-accion="mac.bloquear">
+                <span class="acceso__icono"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.8a4.5 4.5 0 0 1 9 0V10h.5a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 7 10zm2 0h5V7.8a2.5 2.5 0 0 0-5 0z"/></svg></span>
+                <span class="acceso__texto">Bloquear Mac</span>
+              </button>
+            </section>
+          </div>
+        </section>
+
+        <!-- ASISTENTE: chat -->
+        <section class="pagina pagina--chat" data-pagina="chat" data-titulo="Conversación" id="pagina-chat" hidden>
+          <section id="tarjeta-chat" class="tarjeta vidrio chat" aria-labelledby="t-chat" hidden>
+            <div class="tarjeta__cabecera">
               <h2 id="t-chat">Asistente</h2>
               <button id="chat-nueva" class="boton boton--chico" type="button">Nueva charla</button>
             </div>
@@ -173,103 +159,126 @@
               <button class="boton" type="button" data-respuesta="No, cancela.">No</button>
             </div>
             <form id="chat-form" class="chat__form" autocomplete="off">
-              <button id="chat-mic" class="boton boton--icono" type="button" aria-label="Hablar" hidden><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg></button>
+              <button id="chat-mic" class="boton-redondo boton-redondo--grande" type="button" aria-label="Hablar" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg></button>
               <input id="chat-texto" type="text" maxlength="2000" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente" />
-              <button id="chat-enviar" class="boton boton--primario boton--icono" type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5V10l12 2-12 2z"/></svg></button>
+              <button id="chat-enviar" class="boton-redondo boton-redondo--grande boton-redondo--acento" type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 4 5 11l1.4 1.4L11 7.8V20h2V7.8l4.6 4.6L19 11z"/></svg></button>
             </form>
           </section>
-        </div>
+        </section>
 
-        <!-- PÁGINA 3: Mac y Casa -->
-        <div class="pagina pagina--mac-casa" data-indice="2">
-          <div class="pagina__grid">
-            <section id="tarjeta-mac" class="tarjeta" aria-labelledby="t-mac">
-              <h2 id="t-mac"><span id="mac-nombre">Mac</span> <small id="mac-sistema" class="tenue"></small></h2>
-              <div class="medidor"><span>CPU</span><div class="medidor__barra"><i id="cpu-barra"></i></div><b id="cpu-valor">–</b></div>
-              <div class="medidor"><span>RAM</span><div class="medidor__barra"><i id="ram-barra"></i></div><b id="ram-valor">–</b></div>
-              <div class="medidor"><span>Disco</span><div class="medidor__barra"><i id="disco-barra"></i></div><b id="disco-valor">–</b></div>
-              <div class="mac__inferior">
-                <div id="bateria-aro" class="bateria-aro" title="Batería">
-                  <svg viewBox="0 0 64 64" width="64" height="64" class="bateria-svg" aria-label="Batería">
-                    <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5" />
-                    <circle id="bateria-arco" cx="32" cy="32" r="26" fill="none" stroke="#3ecf8e" stroke-width="5"
-                      stroke-dasharray="163.36" stroke-dashoffset="0" stroke-linecap="round"
-                      transform="rotate(-90 32 32)" />
-                    <text id="bateria-icono" x="32" y="22" text-anchor="middle" font-size="11" fill="#f5b544" hidden>⚡</text>
-                    <text id="bateria-valor" x="32" y="37" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">--%</text>
-                  </svg>
-                </div>
-                <span id="bateria" hidden>–</span>
-                <dl class="datos datos--compactos">
-                  <div><dt>Encendida</dt><dd id="uptime">–</dd></div>
-                  <div><dt>Carga</dt><dd id="carga">–</dd></div>
-                </dl>
+        <!-- MAC: monitor, casa y apps -->
+        <section class="pagina pagina--mac" data-pagina="mac" data-titulo="Mac y Casa">
+          <div class="columna">
+            <section id="tarjeta-mac" class="tarjeta vidrio monitor" aria-labelledby="t-mac">
+              <div class="tarjeta__cabecera">
+                <h2 id="t-mac"><span id="mac-nombre">Mac</span></h2>
+                <small id="mac-sistema" class="tenue"></small>
               </div>
-            </section>
-
-            <section id="tarjeta-escenas" class="tarjeta" aria-labelledby="t-escenas">
-              <h2 id="t-escenas">Casa</h2>
-              <div id="escenas" class="rejilla"><p class="tenue">Sin escenas. Agrégalas en mac-agent/config.json.</p></div>
-              <h2 id="t-apps" class="subtitulo">Apps</h2>
-              <div id="apps" class="rejilla"><p class="tenue">Sin apps permitidas.</p></div>
+              <div class="anillos">
+                <div class="anillo" id="anillo-cpu"><svg viewBox="0 0 64 64"><circle class="anillo__pista" cx="32" cy="32" r="26"/><circle class="anillo__arco" cx="32" cy="32" r="26"/></svg><b id="cpu-valor">–</b><span>CPU</span></div>
+                <div class="anillo" id="anillo-ram"><svg viewBox="0 0 64 64"><circle class="anillo__pista" cx="32" cy="32" r="26"/><circle class="anillo__arco" cx="32" cy="32" r="26"/></svg><b id="ram-valor">–</b><span>Memoria</span></div>
+                <div class="anillo" id="anillo-disco"><svg viewBox="0 0 64 64"><circle class="anillo__pista" cx="32" cy="32" r="26"/><circle class="anillo__arco" cx="32" cy="32" r="26"/></svg><b id="disco-valor">–</b><span>Disco</span></div>
+                <div class="anillo" id="anillo-bateria"><svg viewBox="0 0 64 64"><circle class="anillo__pista" cx="32" cy="32" r="26"/><circle class="anillo__arco" cx="32" cy="32" r="26"/></svg><b id="bateria-valor">–</b><span id="bateria">Batería</span></div>
+              </div>
+              <dl class="datos">
+                <div><dt>Encendida</dt><dd id="uptime">–</dd></div>
+                <div><dt>Carga</dt><dd id="carga">–</dd></div>
+                <div><dt>Memoria usada</dt><dd id="ram-detalle">–</dd></div>
+                <div><dt>Disco libre</dt><dd id="disco-detalle">–</dd></div>
+              </dl>
             </section>
           </div>
-        </div>
+          <div class="columna">
+            <section id="tarjeta-escenas" class="tarjeta vidrio" aria-labelledby="t-escenas">
+              <h2 id="t-escenas">Casa</h2>
+              <div id="escenas" class="rejilla"><p class="tenue rejilla__vacia">Aún no hay escenas. Se añaden en la configuración del agente.</p></div>
+            </section>
+            <section id="tarjeta-apps" class="tarjeta vidrio lanzador" aria-labelledby="t-apps">
+              <h2 id="t-apps">Apps</h2>
+              <div id="apps" class="lanzador__rejilla"><p class="tenue rejilla__vacia">Sin apps permitidas.</p></div>
+            </section>
+          </div>
+        </section>
 
-        <!-- PÁGINA 4: Agenda -->
-        <div class="pagina pagina--agenda" data-indice="3" id="pagina-agenda" hidden>
-          <section id="tarjeta-agenda" class="tarjeta" aria-labelledby="t-agenda" hidden>
-            <h2 id="t-agenda">Agenda</h2>
+        <!-- AGENDA: calendario y recordatorios -->
+        <section class="pagina pagina--agenda" data-pagina="agenda" data-titulo="Agenda" id="pagina-agenda" hidden>
+          <section id="tarjeta-agenda" class="tarjeta vidrio calendario" aria-labelledby="t-agenda" hidden>
+            <div class="calendario__cabecera">
+              <span id="calendario-dia-semana" class="calendario__semana"></span>
+              <span id="calendario-dia" class="calendario__dia"></span>
+              <h2 id="t-agenda" class="calendario__titulo">Calendario</h2>
+            </div>
             <div id="agenda" class="agenda"><p class="tenue">Cargando…</p></div>
           </section>
-        </div>
+          <section id="tarjeta-recordatorios" class="tarjeta vidrio recordatorios" aria-labelledby="t-recordatorios">
+            <div class="tarjeta__cabecera">
+              <h2 id="t-recordatorios" class="recordatorios__titulo">Recordatorios</h2>
+              <span id="recordatorios-cuenta" class="recordatorios__cuenta">0</span>
+            </div>
+            <div id="agenda-recordatorios" class="agenda agenda--recordatorios"><p class="tenue">Cargando…</p></div>
+          </section>
+        </section>
       </div>
 
-      <!-- Indicador inferior de páginas estilo Apple (dots) -->
-      <footer class="panel__paginador" aria-hidden="true">
-        <span class="dot dot--activo" data-pagina="0"></span>
-        <span id="dot-chat" class="dot" data-pagina="1" hidden></span>
-        <span class="dot" data-pagina="2"></span>
-        <span id="dot-agenda" class="dot" data-pagina="3" hidden></span>
-      </footer>
+      <!-- Dock -->
+      <nav class="dock vidrio" aria-label="Pantallas">
+        <button class="dock__item dock__item--activo" type="button" data-ir="inicio" aria-label="Inicio"><span class="dock__icono dock__icono--inicio"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 3.2 3 10.6V20a1 1 0 0 0 1 1h5.2v-6.2h5.6V21H20a1 1 0 0 0 1-1v-9.4z"/></svg></span></button>
+        <button id="tab-chat" class="dock__item" type="button" data-ir="chat" aria-label="Asistente" hidden><span class="dock__icono dock__icono--chat"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 3.5c-5 0-9 3.4-9 7.6 0 2.4 1.3 4.5 3.3 5.9-.1 1.2-.6 2.4-1.5 3.3 1.9-.1 3.6-.8 4.9-1.9.7.2 1.5.3 2.3.3 5 0 9-3.4 9-7.6s-4-7.6-9-7.6z"/></svg></span></button>
+        <button class="dock__item" type="button" data-ir="mac" aria-label="Mac y Casa"><span class="dock__icono dock__icono--mac"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M5 5.5h14a1 1 0 0 1 1 1V16H4V6.5a1 1 0 0 1 1-1zM2.5 17.2h19v.6a1.7 1.7 0 0 1-1.7 1.7H4.2a1.7 1.7 0 0 1-1.7-1.7z"/></svg></span></button>
+        <button id="tab-agenda" class="dock__item" type="button" data-ir="agenda" aria-label="Agenda" hidden><span class="dock__icono dock__icono--agenda"><i id="dock-dia-semana">HOY</i><b id="dock-dia">–</b></span></button>
+        <span class="dock__separador" aria-hidden="true"></span>
+        <button id="boton-timer" class="dock__item" type="button" aria-label="Temporizador"><span class="dock__icono dock__icono--timer"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 6.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm.9 7.6h-1.8V9.4h1.8zM9.5 3h5v1.8h-5z"/></svg></span></button>
+        <button id="boton-noche" class="dock__item" type="button" aria-label="Modo noche"><span class="dock__icono dock__icono--noche"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12.3 2a10 10 0 1 0 9.7 12.6A8 8 0 0 1 12.3 2z"/></svg></span></button>
+      </nav>
     </main>
 
-    <div id="aviso-recordatorio" class="recordatorio" role="alertdialog" aria-labelledby="recordatorio-titulo" hidden>
-      <div class="recordatorio__caja">
-        <p class="tenue">Recordatorio</p>
-        <p id="recordatorio-titulo" class="recordatorio__titulo"></p>
-        <div class="fila">
+    <div id="aviso-recordatorio" class="modal" role="alertdialog" aria-labelledby="recordatorio-titulo" hidden>
+      <div class="modal__caja">
+        <p class="modal__etiqueta">Recordatorio</p>
+        <p id="recordatorio-titulo" class="modal__titulo-grande"></p>
+        <div class="fila fila--centrada">
           <button id="recordatorio-hecho" class="boton boton--primario" type="button">Hecho</button>
           <button id="recordatorio-ok" class="boton" type="button">Cerrar</button>
         </div>
       </div>
     </div>
 
-    <!-- Modal seguro para desemparejar (requiere confirmación deliberada) -->
-    <div id="modal-desemparejar" class="recordatorio" role="alertdialog" aria-labelledby="desemparejar-titulo" hidden>
-      <div class="recordatorio__caja desemparejar__caja">
-        <p class="tenue">Zona de seguridad</p>
-        <h2 id="desemparejar-titulo" class="desemparejar__titulo">¿Desemparejar la tablet?</h2>
-        <p class="desemparejar__texto tenue">Se borrará el token guardado en esta tablet y tendrás que volver a ingresar los datos para conectar con la Mac.</p>
+    <!-- Alarma sonando -->
+    <div id="aviso-alarma" class="modal" role="alertdialog" aria-labelledby="alarma-sonando-titulo" hidden>
+      <div class="modal__caja">
+        <p class="modal__etiqueta">Alarma</p>
+        <p id="alarma-sonando-hora" class="modal__hora"></p>
+        <p id="alarma-sonando-titulo" class="modal__titulo-grande"></p>
         <div class="fila fila--centrada">
-          <button id="desemparejar-cancelar" class="boton boton--primario" type="button">Cancelar y mantener</button>
-          <button id="desemparejar-confirmar" class="boton boton--peligro" type="button">Sí, desemparejar</button>
+          <button id="alarma-detener" class="boton boton--primario" type="button">Detener</button>
         </div>
       </div>
     </div>
 
-    <!-- Modal Temporizador -->
-    <div id="modal-timer" class="recordatorio" role="dialog" aria-labelledby="timer-modal-titulo" hidden>
-      <div class="recordatorio__caja modal-timer__caja">
-        <h2 id="timer-modal-titulo">Temporizador</h2>
+    <!-- Desemparejar: pide confirmación deliberada -->
+    <div id="modal-desemparejar" class="modal" role="alertdialog" aria-labelledby="desemparejar-titulo" hidden>
+      <div class="modal__caja modal__caja--angosta">
+        <h2 id="desemparejar-titulo" class="modal__titulo">¿Desemparejar la tablet?</h2>
+        <p class="tenue">Se borrará el token guardado aquí y habrá que volver a pegarlo para conectar con la Mac.</p>
+        <div class="fila fila--centrada">
+          <button id="desemparejar-cancelar" class="boton boton--primario" type="button">Cancelar</button>
+          <button id="desemparejar-confirmar" class="boton boton--peligro" type="button">Desemparejar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Temporizador -->
+    <div id="modal-timer" class="modal" role="dialog" aria-labelledby="timer-modal-titulo" hidden>
+      <div class="modal__caja modal__caja--angosta">
+        <h2 id="timer-modal-titulo" class="modal__titulo">Temporizador</h2>
         <div id="timer-activo-vista" hidden>
-          <div class="timer-aro-caja">
-            <svg viewBox="0 0 120 120" width="120" height="120" class="timer-svg">
-              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8" />
-              <circle id="timer-arco" cx="60" cy="60" r="50" fill="none" stroke="#5b9dff" stroke-width="8"
+          <div class="timer-aro">
+            <svg viewBox="0 0 120 120" class="timer-svg">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="8" />
+              <circle id="timer-arco" cx="60" cy="60" r="50" fill="none" stroke="#ff9f0a" stroke-width="8"
                 stroke-dasharray="314.16" stroke-dashoffset="0" stroke-linecap="round"
                 transform="rotate(-90 60 60)" />
-              <text id="timer-cuenta" x="60" y="67" text-anchor="middle" font-size="22" font-weight="600" fill="currentColor">00:00</text>
+              <text id="timer-cuenta" x="60" y="68" text-anchor="middle" font-size="24" font-weight="500" fill="currentColor">00:00</text>
             </svg>
           </div>
           <div class="fila fila--centrada">
@@ -278,17 +287,17 @@
           </div>
         </div>
         <div id="timer-config-vista">
-          <p class="tenue">Selecciona un tiempo rápido o ingresa los minutos:</p>
           <div class="timer-presets">
             <button class="boton boton--preset" type="button" data-minutos="1">1 min</button>
             <button class="boton boton--preset" type="button" data-minutos="5">5 min</button>
             <button class="boton boton--preset" type="button" data-minutos="10">10 min</button>
             <button class="boton boton--preset" type="button" data-minutos="15">15 min</button>
             <button class="boton boton--preset" type="button" data-minutos="30">30 min</button>
+            <button class="boton boton--preset" type="button" data-minutos="60">1 hora</button>
           </div>
-          <form id="form-timer-personalizado" class="timer-custom-form">
-            <label class="tenue">Personalizado (minutos)
-              <input id="timer-custom-min" type="number" min="1" max="180" placeholder="Ej. 12" required />
+          <form id="form-timer-personalizado" class="timer-propio">
+            <label>Otro (minutos)
+              <input id="timer-custom-min" type="number" min="1" max="180" placeholder="12" required />
             </label>
             <button class="boton boton--primario" type="submit">Iniciar</button>
           </form>
@@ -299,15 +308,15 @@
       </div>
     </div>
 
-    <!-- Modal Nueva Alarma -->
-    <div id="modal-alarma" class="recordatorio" role="dialog" aria-labelledby="alarma-modal-titulo" hidden>
-      <form id="form-alarma" class="recordatorio__caja modal-alarma__caja" autocomplete="off">
-        <h2 id="alarma-modal-titulo">Nueva Alarma</h2>
+    <!-- Nueva alarma -->
+    <div id="modal-alarma" class="modal" role="dialog" aria-labelledby="alarma-modal-titulo" hidden>
+      <form id="form-alarma" class="modal__caja modal__caja--angosta modal__formulario" autocomplete="off">
+        <h2 id="alarma-modal-titulo" class="modal__titulo">Nueva alarma</h2>
         <label>Hora
           <input id="campo-alarma-hora" type="time" required />
         </label>
         <label>Título
-          <input id="campo-alarma-titulo" type="text" placeholder="Ej. Despertar, Reunión…" required />
+          <input id="campo-alarma-titulo" type="text" placeholder="Despertar, reunión…" />
         </label>
         <div class="fila fila--centrada">
           <button id="alarma-cancelar" class="boton" type="button">Cancelar</button>

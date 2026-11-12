@@ -34,6 +34,12 @@ if ! zsh "$ORIGEN/agenda/construir.sh" "$DESTINO"; then
   echo "Aviso: sin agenda (no se pudo compilar el ayudante). El resto funciona." >&2
 fi
 
+# Fondo de pantalla real de la Mac (también los Aerial): otra mini app en Swift.
+# Sin ella el panel usa la imagen genérica del sistema y no hay efecto de vidrio.
+if ! zsh "$ORIGEN/fondo/construir.sh" "$DESTINO"; then
+  echo "Aviso: sin fondo real (no se pudo compilar el ayudante). El resto funciona." >&2
+fi
+
 if [[ ! -f "$DESTINO/config.json" ]]; then
   cp "$ORIGEN/config.example.json" "$DESTINO/config.json"
   echo "Creado $DESTINO/config.json desde el ejemplo: edita escenas y apps."

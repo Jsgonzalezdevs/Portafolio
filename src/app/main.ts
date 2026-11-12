@@ -14,6 +14,7 @@ import {
 } from './conexion';
 import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
+import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
 import { bytes, duracion, esDeNoche, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
 
 export interface PlaylistRapida {
@@ -59,6 +60,10 @@ interface EstadoMac {
   clima?: Clima | null;
   /** Recordatorios que acaban de vencer. */
   avisos?: Aviso[];
+  /** Alarmas que están sonando este minuto. */
+  alarmasActivas?: Alarma[];
+  /** Firma del fondo de pantalla de la Mac: cuando cambia, se vuelve a descargar. */
+  fondo?: string | null;
 }
 
 interface Catalogo {
@@ -107,7 +112,10 @@ function iniciarTemporizadorProgreso() {
       posicionLocalSeg += 1;
       if (!tocandoProgreso) {
         const slider = $<HTMLInputElement>('media-progreso');
-        if (slider) slider.value = String(posicionLocalSeg);
+        if (slider) {
+          slider.value = String(posicionLocalSeg);
+          pintarRango(slider);
+        }
         const actualEl = $('media-tiempo-actual');
         if (actualEl) actualEl.textContent = formatoTiempoPista(posicionLocalSeg);
       }
@@ -122,30 +130,46 @@ function detenerTemporizadorProgreso() {
   }
 }
 
-// ---------- Fondo dinámico ----------
-let temporizadorFondo: number | undefined;
+// ---------- Fondo de pantalla de la Mac ----------
+// El agente entrega el fondo tal como se ve en la Mac y una copia desenfocada para el vidrio
+// de los widgets. Se vuelve a bajar solo cuando cambia la firma que viaja en el estado.
 let urlFondoActual: string | null = null;
+let firmaFondo: string | null = null;
+let cargandoFondo = false;
 
-async function cargarFondo(e: Emparejamiento) {
+async function cargarFondo(e: Emparejamiento, firma: string | null) {
+  if (cargandoFondo) return;
+  cargandoFondo = true;
   try {
-    const resp = await fetch(`${e.agente}/fondo`, {
-      headers: { Authorization: `Bearer ${e.token}` },
-      cache: 'no-store',
-    });
-    if (!resp.ok) return;
-    const blob = await resp.blob();
-    const nuevaUrl = URL.createObjectURL(blob);
-    const fondoEl = $('fondo-mac');
-    if (fondoEl) {
-      fondoEl.style.backgroundImage = `url("${nuevaUrl}")`;
-    }
-    if (urlFondoActual) {
-      URL.revokeObjectURL(urlFondoActual);
-    }
-    urlFondoActual = nuevaUrl;
+    const pedir = async (ruta: string) => {
+      const r = await fetch(`${e.agente}${ruta}`, { headers: { Authorization: `Bearer ${e.token}` }, cache: 'no-store' });
+      return r.ok ? { blob: await r.blob(), firma: r.headers.get('X-Fondo') } : null;
+    };
+    const entrega = await pedir('/fondo');
+    if (!entrega) return;
+    const nueva = URL.createObjectURL(entrega.blob);
+    $('fondo-mac').style.backgroundImage = `url("${nueva}")`;
+    if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+    urlFondoActual = nueva;
+    // La firma de lo que de verdad se entregó (la del estado puede ir un paso por detrás).
+    firmaFondo = entrega.firma || firma || '';
+    // El vidrio es opcional (agentes viejos no lo tienen): sin él, los widgets quedan con vidrio liso.
+    const vidrio = await pedir('/fondo?v=vidrio').catch(() => null);
+    if (vidrio) await aplicarVidrio(vidrio.blob).catch(() => limpiarVidrio());
+    else limpiarVidrio();
   } catch {
-    // Si falla o la Mac está apagada, se conserva el fondo predeterminado
+    // Mac apagada o sin red: se conserva el fondo que ya había.
+  } finally {
+    cargandoFondo = false;
   }
+}
+
+function olvidarFondo() {
+  if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+  urlFondoActual = null;
+  firmaFondo = null;
+  $('fondo-mac').style.backgroundImage = '';
+  limpiarVidrio();
 }
 
 // ---------- Avisos ----------
@@ -162,6 +186,8 @@ function avisar(texto: string, error = false) {
 // ---------- Reloj y modo noche ----------
 const formatoHora = new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
 const formatoFecha = new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+const formatoBarra = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
+const diaSemana = new Intl.DateTimeFormat('es-CO', { weekday: 'short' });
 let nocheManual: boolean | null = null; // null = automático según la hora
 let despiertoHasta = 0;
 
@@ -172,6 +198,14 @@ function pintarReloj() {
   $('noche-hora').textContent = hora;
   const fecha = formatoFecha.format(ahora);
   $('fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+  // Barra de menús, como la de macOS: «jue 12 nov  12:34».
+  $('menubar-reloj').textContent = `${formatoBarra.format(ahora).replace(/\./g, '')}  ${hora}`;
+  // Icono del Dock y encabezado del calendario: día de la semana y número.
+  const semana = diaSemana.format(ahora).replace(/\./g, '');
+  $('dock-dia-semana').textContent = semana.toUpperCase();
+  $('dock-dia').textContent = String(ahora.getDate());
+  $('calendario-dia-semana').textContent = semana;
+  $('calendario-dia').textContent = String(ahora.getDate());
   const noche = (nocheManual ?? esDeNoche(ahora)) && Date.now() > despiertoHasta;
   $('noche').hidden = !noche || !emparejamiento;
 
@@ -510,64 +544,110 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Estado de la Mac ----------
-function medidor(barra: string, valor: string, pct: number, texto: string) {
-  const b = $(barra);
-  b.style.width = `${pct}%`;
-  b.className = pct >= 90 ? 'critico' : pct >= 75 ? 'alto' : '';
-  $(valor).textContent = texto;
+const CIRCUNFERENCIA = 163.36; // 2 · π · 26, el radio de los anillos
+
+const COLOR = { azul: '#0a84ff', verde: '#30d158', naranja: '#ff9f0a', rojo: '#ff453a' };
+
+/** Pinta un anillo de actividad (CPU, memoria, disco, batería). */
+function anillo(id: string, pct: number, color: string) {
+  const arco = document.querySelector<SVGCircleElement>(`#${id} .anillo__arco`);
+  if (!arco) return;
+  const limpio = Math.max(0, Math.min(100, pct));
+  arco.style.strokeDashoffset = String(CIRCUNFERENCIA * (1 - limpio / 100));
+  arco.style.stroke = color;
 }
+
+/** Para lo que «cuanto menos mejor»: azul, y naranja/rojo cuando se aprieta. */
+const colorCarga = (pct: number) => (pct >= 90 ? COLOR.rojo : pct >= 75 ? COLOR.naranja : COLOR.azul);
+
+/** Parte recorrida de un deslizador (la pinta la hoja de estilos con --p). */
+function pintarRango(input: HTMLInputElement) {
+  const max = Number(input.max) || 100;
+  const min = Number(input.min) || 0;
+  const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
+  input.style.setProperty('--p', `${Math.max(0, Math.min(100, pct))}%`);
+}
+
+// Color de ambiente del reproductor: la carátula reducida a 8×8 y ampliada da manchas suaves.
+let ambienteDe: string | null = null;
+function pintarAmbiente(caratula: string | null) {
+  const el = document.getElementById('musica-ambiente');
+  if (!el) return;
+  if (!caratula) {
+    ambienteDe = null;
+    el.classList.remove('visible');
+    return;
+  }
+  if (caratula === ambienteDe) return;
+  ambienteDe = caratula;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    if (ambienteDe !== caratula) return;
+    try {
+      const lienzo = document.createElement('canvas');
+      lienzo.width = 8;
+      lienzo.height = 8;
+      lienzo.getContext('2d')!.drawImage(img, 0, 0, 8, 8);
+      el.style.backgroundImage = `url("${lienzo.toDataURL('image/jpeg', 0.8)}")`;
+      el.classList.add('visible');
+    } catch {
+      // Servidor de carátulas sin CORS: queda el vidrio liso.
+      el.classList.remove('visible');
+    }
+  };
+  img.onerror = () => el.classList.remove('visible');
+  img.src = caratula;
+}
+
+const ICONO_PLAY = '<path fill="currentColor" d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/>';
+const ICONO_PAUSA = '<path fill="currentColor" d="M7 5h3.6v14H7zm6.4 0H17v14h-3.6z"/>';
 
 function pintarEstado(e: EstadoMac) {
   ultimoEstadoMac = e;
   $('mac-nombre').textContent = e.nombre;
   $('mac-sistema').textContent = e.sistema;
+
   const cpu = Math.round(e.cpuPct);
-  medidor('cpu-barra', 'cpu-valor', cpu, `${cpu}%`);
+  $('cpu-valor').textContent = `${cpu}%`;
+  anillo('anillo-cpu', cpu, colorCarga(cpu));
+
   const ram = porcentaje(e.memoria.usadaBytes, e.memoria.totalBytes);
-  medidor('ram-barra', 'ram-valor', ram, bytes(e.memoria.usadaBytes));
+  $('ram-valor').textContent = `${ram}%`;
+  anillo('anillo-ram', ram, colorCarga(ram));
+  $('ram-detalle').textContent = `${bytes(e.memoria.usadaBytes)} de ${bytes(e.memoria.totalBytes)}`;
+
   if (e.disco) {
     const usado = porcentaje(e.disco.totalBytes - e.disco.libreBytes, e.disco.totalBytes);
-    medidor('disco-barra', 'disco-valor', usado, `${usado}%`);
+    $('disco-valor').textContent = `${usado}%`;
+    anillo('anillo-disco', usado, colorCarga(usado));
+    $('disco-detalle').textContent = bytes(e.disco.libreBytes);
   }
 
-  // Anillo de batería SVG
-  const bateriaArco = $<SVGCircleElement>('bateria-arco');
-  const bateriaValor = $<SVGTextElement>('bateria-valor');
-  const bateriaIcono = $<SVGTextElement>('bateria-icono');
-  const elBateriaLegacy = document.getElementById('bateria');
-  const circunferencia = 163.36; // 2 * PI * 26
-
+  // Batería: anillo en «Mac y Casa» y pila en la barra de menús (solo si la Mac tiene).
+  const menuPila = $('menubar-bateria');
   if (e.bateria) {
     const pct = Math.max(0, Math.min(100, Math.round(e.bateria.porcentaje)));
-    const offset = circunferencia * (1 - pct / 100);
-    if (bateriaArco) {
-      bateriaArco.style.strokeDashoffset = String(offset);
-      bateriaArco.style.stroke = pct > 50 ? '#3ecf8e' : pct >= 20 ? '#f5b544' : '#ff6b6b';
-    }
-    if (bateriaValor) bateriaValor.textContent = `${pct}%`;
-    const cargando = Boolean(e.bateria.cargando || e.bateria.conectada);
-    if (bateriaIcono) bateriaIcono.style.display = cargando ? 'inline' : 'none';
-    if (bateriaValor) bateriaValor.setAttribute('y', cargando ? '42' : '37');
-    if (elBateriaLegacy) {
-      elBateriaLegacy.textContent = `${pct}%${e.bateria.cargando ? ' · cargando' : e.bateria.conectada ? ' · enchufada' : ''}`;
-    }
+    const enCarga = Boolean(e.bateria.cargando);
+    $('bateria-valor').textContent = `${pct}%`;
+    anillo('anillo-bateria', pct, enCarga ? COLOR.verde : pct <= 20 ? COLOR.rojo : pct <= 40 ? COLOR.naranja : COLOR.verde);
+    $('bateria').textContent = e.bateria.cargando ? 'Cargando' : e.bateria.conectada ? 'Enchufada' : 'Batería';
+    menuPila.hidden = false;
+    const nivel = $('menubar-bateria-nivel');
+    nivel.style.width = `${pct}%`;
+    nivel.className = enCarga ? 'cargando' : pct <= 20 ? 'baja' : '';
+    $('menubar-bateria-valor').textContent = `${pct}%`;
   } else {
-    if (bateriaArco) {
-      bateriaArco.style.strokeDashoffset = '0';
-      bateriaArco.style.stroke = '#3ecf8e';
-    }
-    if (bateriaValor) {
-      bateriaValor.textContent = '100%';
-      bateriaValor.setAttribute('y', '42');
-    }
-    if (bateriaIcono) bateriaIcono.style.display = 'inline';
-    if (elBateriaLegacy) elBateriaLegacy.textContent = 'Corriente';
+    $('bateria-valor').textContent = '100%';
+    anillo('anillo-bateria', 100, COLOR.verde);
+    $('bateria').textContent = 'Corriente';
+    menuPila.hidden = true;
   }
 
   $('uptime').textContent = duracion(e.uptimeSeg);
   $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
 
-  // Clima junto al reloj
+  // Clima en la barra de menús
   if (e.clima) {
     $('clima').hidden = false;
     $('clima-icono').textContent = e.clima.icono;
@@ -578,7 +658,7 @@ function pintarEstado(e: EstadoMac) {
     $('clima').hidden = true;
   }
 
-  // Reproductor multimedia en la tarjeta de control
+  // Reproductor
   const rep = e.reproductor;
   const activo = $('media-activo');
   const reposo = $('media-reposo');
@@ -591,8 +671,7 @@ function pintarEstado(e: EstadoMac) {
   const salidaAudio = rep?.dispositivoSalida || e.dispositivoSalida;
   if (salidaAudio) {
     badgeDisp.hidden = false;
-    const esAuricular = /airpod|auricular|headphone|aud[ií]fono/i.test(salidaAudio);
-    badgeDisp.textContent = `${esAuricular ? '🎧' : '🔊'} ${salidaAudio}`;
+    badgeDisp.textContent = salidaAudio;
     badgeDisp.title = `Dispositivo de salida: ${salidaAudio}`;
   } else {
     badgeDisp.hidden = true;
@@ -620,10 +699,8 @@ function pintarEstado(e: EstadoMac) {
     } else {
       caratula.hidden = true;
     }
-    iconoPlayPause.innerHTML =
-      rep.estado === 'playing'
-        ? '<path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'
-        : '<path fill="currentColor" d="M8 5v14l11-7z"/>';
+    pintarAmbiente(rep.caratula);
+    iconoPlayPause.innerHTML = rep.estado === 'playing' ? ICONO_PAUSA : ICONO_PLAY;
     $('boton-playpause').setAttribute('aria-label', rep.estado === 'playing' ? 'Pausar' : 'Reproducir');
 
     // Progreso y duración
@@ -637,6 +714,7 @@ function pintarEstado(e: EstadoMac) {
         slider.value = String(posicionLocalSeg);
         $('media-tiempo-actual').textContent = formatoTiempoPista(posicionLocalSeg);
       }
+      pintarRango(slider);
       $('media-tiempo-total').textContent = formatoTiempoPista(duracionLocalSeg);
     } else {
       progresoCaja.hidden = true;
@@ -653,12 +731,14 @@ function pintarEstado(e: EstadoMac) {
     badge.hidden = true;
     albumEl.hidden = true;
     progresoCaja.hidden = true;
+    pintarAmbiente(null);
     detenerTemporizadorProgreso();
-    iconoPlayPause.innerHTML = '<path fill="currentColor" d="M8 5v14l11-7z"/>';
+    iconoPlayPause.innerHTML = ICONO_PLAY;
     $('boton-playpause').setAttribute('aria-label', 'Reproducir o pausar');
   }
 
   agendaUI.mostrarAvisos(e.avisos);
+  mostrarAlarmaSonando(e.alarmasActivas ?? []);
   actualizarAhora();
 
   ultimoVolumen = e.volumen;
@@ -670,6 +750,10 @@ function pintarEstado(e: EstadoMac) {
     $('icono-vol').hidden = e.volumen.silenciado;
     $('icono-mute').hidden = !e.volumen.silenciado;
   }
+  pintarRango(rango);
+
+  // El fondo de la Mac cambió (p. ej. rotó el Aerial): volver a bajarlo.
+  if (e.fondo && e.fondo !== firmaFondo && emparejamiento) void cargarFondo(emparejamiento, e.fondo);
 }
 
 const TEXTO_CONEXION: Record<EstadoConexion, string> = {
@@ -681,7 +765,7 @@ function pintarConexion(c: EstadoConexion) {
   const el = $('conexion');
   if (el.dataset.estado === c) return;
   el.dataset.estado = c;
-  el.textContent = TEXTO_CONEXION[c];
+  $('conexion-texto').textContent = TEXTO_CONEXION[c];
 }
 
 // ---------- Acciones ----------
@@ -710,6 +794,7 @@ const rango = $<HTMLInputElement>('volumen');
 rango.addEventListener('input', () => {
   tocandoVolumen = true;
   $('volumen-valor').textContent = rango.value;
+  pintarRango(rango);
 });
 rango.addEventListener('change', async () => {
   await accion('volumen.fijar', { nivel: Number(rango.value) });
@@ -725,6 +810,7 @@ if (sliderProgreso) {
     tocandoProgreso = true;
     posicionLocalSeg = Number(sliderProgreso.value);
     $('media-tiempo-actual').textContent = formatoTiempoPista(posicionLocalSeg);
+    pintarRango(sliderProgreso);
   });
   sliderProgreso.addEventListener('change', async () => {
     const seg = Math.round(Number(sliderProgreso.value));
@@ -749,7 +835,12 @@ function pintarPlaylistsRapidas(items: PlaylistRapida[]) {
     btn.className = 'chip-playlist';
     btn.type = 'button';
     btn.setAttribute('data-uri', p.uri);
-    btn.innerHTML = `<span class="chip-playlist__icono">${p.icono}</span><span>${p.nombre}</span>`;
+    const iconoChip = document.createElement('span');
+    iconoChip.className = 'chip-playlist__icono';
+    iconoChip.textContent = p.icono;
+    const nombreChip = document.createElement('span');
+    nombreChip.textContent = p.nombre;
+    btn.append(iconoChip, nombreChip);
     btn.addEventListener('click', () => {
       void accion('media.reproducir_uri', { uri: p.uri }, btn);
     });
@@ -767,6 +858,48 @@ const ICONOS_ESCENAS: Record<string, string> = {
 
 function iconoParaEscena(id: string): string {
   return ICONOS_ESCENAS[id] ?? '⚡';
+}
+
+/** Colores de marca de las apps conocidas; el resto se reparte por nombre. */
+const COLORES_APP: Record<string, [string, string]> = {
+  spotify: ['#1ed760', '#14a547'],
+  safari: ['#4cb8ff', '#0a6cff'],
+  whatsapp: ['#4be07a', '#1ba94c'],
+  music: ['#ff5a73', '#e0113a'],
+  musica: ['#ff5a73', '#e0113a'],
+  chrome: ['#ffb02e', '#e8453c'],
+  mail: ['#5ab2ff', '#0a6cff'],
+  notas: ['#ffe066', '#f2a900'],
+  calendario: ['#ff6a5e', '#e0281d'],
+  vscode: ['#3aa0ff', '#0a5fc4'],
+  slack: ['#9b59ff', '#5b1fc4'],
+  zoom: ['#4d9bff', '#1c60e0'],
+};
+const PALETA_APP: [string, string][] = [
+  ['#ff9f0a', '#e07700'],
+  ['#bf5af2', '#8e2bd0'],
+  ['#64d2ff', '#1a9fd0'],
+  ['#ff6482', '#d6204a'],
+  ['#5e5ce6', '#3634b8'],
+  ['#30d158', '#1a9a3a'],
+];
+
+/** Símbolos de las apps conocidas (SVG fijo, sin datos de fuera). Las demás llevan su inicial. */
+const GLIFOS_APP: Record<string, string> = {
+  spotify:
+    '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4.8 9c4.8-1.4 10.2-.9 14.4 1.5"/><path d="M5.8 12.8c4-1.1 8.4-.7 11.8 1.3"/><path d="M6.9 16.3c3.2-.8 6.4-.4 9.1 1"/></svg>',
+  safari:
+    '<svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="8.6" fill="none" stroke="#fff" stroke-width="1.7"/><path fill="#fff" d="M16.2 7.8l-2.4 5.9-5.9 2.4 2.4-5.9z"/></svg>',
+  whatsapp:
+    '<svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" d="M12 3.6a8.4 8.4 0 0 0-7.2 12.7L3.6 20.4l4.2-1.1A8.4 8.4 0 1 0 12 3.6z"/><path fill="#fff" d="M9.1 8.5c.3 2.7 2.5 5 5.3 5.5l1.2-1.4-2-1-.8.8c-.8-.4-1.5-1.1-1.9-2l.8-.8-1-2z"/></svg>',
+};
+
+function colorDeApp(id: string, nombre: string): [string, string] {
+  const clave = id.toLowerCase();
+  if (COLORES_APP[clave]) return COLORES_APP[clave];
+  let h = 0;
+  for (const c of nombre) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return PALETA_APP[h % PALETA_APP.length];
 }
 
 function pintarBotones(contenedor: string, accionId: string, items: { id: string; nombre: string }[]) {
@@ -791,12 +924,74 @@ function pintarBotones(contenedor: string, accionId: string, items: { id: string
       nombre.textContent = item.nombre;
       b.append(icono, nombre);
     } else {
-      b.className = 'boton';
-      b.textContent = item.nombre;
+      // Apps: icono redondeado con la inicial, como en Launchpad.
+      b.className = 'app';
+      const [claro, oscuro] = colorDeApp(item.id, item.nombre);
+      const icono = document.createElement('span');
+      icono.className = 'app__icono';
+      icono.style.background = `linear-gradient(165deg, ${claro}, ${oscuro})`;
+      const glifo = GLIFOS_APP[item.id.toLowerCase()];
+      if (glifo) icono.innerHTML = glifo;
+      else icono.textContent = item.nombre.charAt(0).toUpperCase();
+      const nombre = document.createElement('span');
+      nombre.className = 'app__nombre';
+      nombre.textContent = item.nombre;
+      b.append(icono, nombre);
     }
     el.appendChild(b);
   }
 }
+
+// ---------- Alarma sonando ----------
+// El agente manda en el estado las alarmas que coinciden con la hora de este minuto.
+let alarmaSonando: string | null = null;
+/** Clave «id@hora» de la alarma que se está mostrando, para silenciarla solo en este minuto. */
+let claveSonando: string | null = null;
+let alarmaSilenciada: string | null = null;
+let temporizadorSonido: number | undefined;
+
+function sonarAlarma(a: Alarma) {
+  const nativo = puenteNativo();
+  if (nativo) nativo.hablar(`Alarma: ${a.titulo}`, false);
+  else sonarPitidoTimer();
+}
+
+function mostrarAlarmaSonando(activas: Alarma[]) {
+  const aviso = $('aviso-alarma');
+  // Solo la que sigue vigente este minuto y no se ha detenido.
+  const a = activas.find((x) => `${x.id}@${x.hora}` !== alarmaSilenciada);
+  if (!a) {
+    if (alarmaSonando) {
+      aviso.hidden = true;
+      alarmaSonando = null;
+      clearInterval(temporizadorSonido);
+      temporizadorSonido = undefined;
+    }
+    if (!activas.length) alarmaSilenciada = null;
+    return;
+  }
+  if (alarmaSonando === a.id) return;
+  alarmaSonando = a.id;
+  claveSonando = `${a.id}@${a.hora}`;
+  $('alarma-sonando-hora').textContent = a.hora;
+  $('alarma-sonando-titulo').textContent = a.titulo;
+  aviso.hidden = false;
+  // Despierta el panel si estaba en modo noche.
+  despiertoHasta = Date.now() + 120_000;
+  $('noche').hidden = true;
+  sonarAlarma(a);
+  clearInterval(temporizadorSonido);
+  temporizadorSonido = window.setInterval(() => sonarAlarma(a), 4000);
+}
+
+$('alarma-detener').addEventListener('click', () => {
+  alarmaSilenciada = claveSonando;
+  $('aviso-alarma').hidden = true;
+  alarmaSonando = null;
+  clearInterval(temporizadorSonido);
+  temporizadorSonido = undefined;
+  window.speechSynthesis?.cancel();
+});
 
 // ---------- Emparejamiento ----------
 function mostrarEmparejar(error = '') {
@@ -811,16 +1006,9 @@ function desemparejar(error = '') {
   cerrarFlujo = null;
   emparejamiento = null;
   guardarEmparejamiento(null);
-  clearInterval(temporizadorFondo);
-  temporizadorFondo = undefined;
   clearInterval(temporizadorResumen);
   temporizadorResumen = undefined;
-  if (urlFondoActual) {
-    URL.revokeObjectURL(urlFondoActual);
-    urlFondoActual = null;
-  }
-  const fondoEl = $('fondo-mac');
-  if (fondoEl) fondoEl.style.backgroundImage = '';
+  olvidarFondo();
   detenerTimer();
   mostrarEmparejar(error);
 }
@@ -834,29 +1022,24 @@ async function iniciar(e: Emparejamiento) {
   pintarPlaylistsRapidas(catalogo.playlistsRapidas ?? []);
   $('tarjeta-chat').hidden = !catalogo.chat;
   agendaUI.activar(Boolean(catalogo.agenda));
-  $('pantalla-panel').classList.toggle('panel--sin-chat', !catalogo.chat);
 
-  const tabChat = document.getElementById('tab-chat');
-  const dotChat = document.getElementById('dot-chat');
-  const paginaChat = document.getElementById('pagina-chat');
-  if (tabChat) tabChat.hidden = !catalogo.chat;
-  if (dotChat) dotChat.hidden = !catalogo.chat;
-  if (paginaChat) paginaChat.hidden = !catalogo.chat;
-
-  const tabAgenda = document.getElementById('tab-agenda');
-  const dotAgenda = document.getElementById('dot-agenda');
-  const paginaAgenda = document.getElementById('pagina-agenda');
-  if (tabAgenda) tabAgenda.hidden = !catalogo.agenda;
-  if (dotAgenda) dotAgenda.hidden = !catalogo.agenda;
-  if (paginaAgenda) paginaAgenda.hidden = !catalogo.agenda;
+  // Pantallas opcionales: el chat y la agenda solo existen si el agente los tiene.
+  for (const [dock, pagina, activo] of [
+    ['tab-chat', 'pagina-chat', Boolean(catalogo.chat)],
+    ['tab-agenda', 'pagina-agenda', Boolean(catalogo.agenda)],
+  ] as const) {
+    $(dock).hidden = !activo;
+    $(pagina).hidden = !activo;
+  }
   $('pantalla-emparejar').hidden = true;
   $('pantalla-panel').hidden = false;
   void mantenerPantalla();
 
-  // Fondo dinámico
-  void cargarFondo(e);
-  clearInterval(temporizadorFondo);
-  temporizadorFondo = window.setInterval(() => void cargarFondo(e), 120_000);
+  // Fondo de pantalla de la Mac. Luego solo se vuelve a bajar si cambia la firma que viaja en el estado.
+  firmaFondo = null;
+  void cargarFondo(e, null);
+  // Con pantallas nuevas disponibles (o no), la que se mira sigue siendo válida y el vidrio se realinea.
+  mostrarPagina(paginaActual);
 
   // Resumen y Alarmas
   void cargarResumen(e);
@@ -982,62 +1165,70 @@ iniciarChat({
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
 });
 
-// ---------- Carrusel deslizable y navegación de páginas ----------
-function inicializarCarrusel() {
-  const carrusel = document.getElementById('panel-carrusel');
-  if (!carrusel) return;
+// ---------- Pantallas, Dock y deslizamiento ----------
+let paginaActual = 'inicio';
 
-  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-tab'));
-  const dots = Array.from(document.querySelectorAll<HTMLElement>('.dot'));
+/** Las pantallas que se pueden ver ahora, en el orden del Dock. */
+function paginasVisibles(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.pagina')).filter((p) => !p.hidden);
+}
 
-  const actualizarPaginacion = (indice: number) => {
-    tabs.forEach((tab) => {
-      const p = Number(tab.dataset.pagina);
-      tab.classList.toggle('nav-tab--activo', p === indice);
-    });
-    dots.forEach((dot) => {
-      const p = Number(dot.dataset.pagina);
-      dot.classList.toggle('dot--activo', p === indice);
-    });
-  };
+function mostrarPagina(nombre: string) {
+  const visibles = paginasVisibles();
+  const destino = visibles.find((p) => p.dataset.pagina === nombre) ?? visibles[0];
+  if (!destino) return;
+  paginaActual = destino.dataset.pagina ?? 'inicio';
+  for (const p of document.querySelectorAll<HTMLElement>('.pagina')) p.classList.toggle('pagina--activa', p === destino);
+  for (const d of document.querySelectorAll<HTMLElement>('.dock__item[data-ir]')) {
+    d.classList.toggle('dock__item--activo', d.dataset.ir === paginaActual);
+  }
+  $('menubar-pagina').textContent = destino.dataset.titulo ?? '';
+  pedirAlineacion();
+}
 
-  const irAPagina = (indice: number) => {
-    const ancho = carrusel.clientWidth;
-    carrusel.scrollTo({ left: indice * ancho, behavior: 'smooth' });
-    actualizarPaginacion(indice);
-  };
+function inicializarNavegacion() {
+  for (const d of document.querySelectorAll<HTMLElement>('.dock__item[data-ir]')) {
+    d.addEventListener('click', () => mostrarPagina(d.dataset.ir ?? 'inicio'));
+  }
 
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const p = Number(tab.dataset.pagina);
-      if (!Number.isNaN(p)) irAPagina(p);
-    });
-  });
-
-  dots.forEach((dot) => {
-    dot.addEventListener('click', () => {
-      const p = Number(dot.dataset.pagina);
-      if (!Number.isNaN(p)) irAPagina(p);
-    });
-  });
-
-  let tScroll: number | undefined;
-  carrusel.addEventListener('scroll', () => {
-    clearTimeout(tScroll);
-    tScroll = window.setTimeout(() => {
-      const ancho = carrusel.clientWidth;
-      if (ancho > 0) {
-        const indice = Math.round(carrusel.scrollLeft / ancho);
-        actualizarPaginacion(indice);
-      }
-    }, 60);
-  });
+  // Deslizar a los lados cambia de pantalla (no en deslizadores ni en la fila de mezclas).
+  const zona = $('panel-paginas');
+  let x0 = 0;
+  let y0 = 0;
+  let valido = false;
+  zona.addEventListener(
+    'touchstart',
+    (ev) => {
+      const t = ev.touches[0];
+      x0 = t.clientX;
+      y0 = t.clientY;
+      valido = ev.touches.length === 1 && !(ev.target as HTMLElement).closest('input[type="range"], .musica__mezclas-fila');
+    },
+    { passive: true },
+  );
+  zona.addEventListener(
+    'touchend',
+    (ev) => {
+      if (!valido) return;
+      valido = false;
+      const t = ev.changedTouches[0];
+      const dx = t.clientX - x0;
+      const dy = t.clientY - y0;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      const visibles = paginasVisibles();
+      const i = visibles.findIndex((p) => p.dataset.pagina === paginaActual);
+      const siguiente = visibles[i + (dx < 0 ? 1 : -1)];
+      if (siguiente) mostrarPagina(siguiente.dataset.pagina ?? 'inicio');
+    },
+    { passive: true },
+  );
 }
 
 // ---------- Arranque ----------
 async function arrancar() {
   pintarReloj();
-  inicializarCarrusel();
+  inicializarNavegacion();
+  iniciarVidrio();
   const desdeHash = emparejamientoDesdeHash(location.hash);
   if (desdeHash) history.replaceState(null, '', location.pathname); // el token no se queda en la barra ni en el historial
   const guardado = desdeHash ?? cargarEmparejamiento();
@@ -1063,8 +1254,8 @@ async function arrancar() {
     // La Mac puede estar apagada al encender la tablet: se muestra el panel y el flujo reintenta solo.
     emparejamiento = guardado;
     guardarEmparejamiento(guardado);
-    $('pantalla-panel').classList.add('panel--sin-chat');
     $('pantalla-panel').hidden = false;
+    mostrarPagina(paginaActual);
     pintarConexion('sin-conexion');
     window.setTimeout(() => void arrancarDeNuevo(guardado), 10_000);
   }

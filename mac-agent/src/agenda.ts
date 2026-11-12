@@ -44,33 +44,40 @@ export interface Agenda {
 
 export const NOMBRE_APP = 'Agenda del asistente.app';
 
-export function crearAgenda(app: string, run: Ejecutor): Agenda {
-  async function llamar<T>(args: string[], timeoutMs = 20_000): Promise<T> {
-    const carpeta = await mkdtemp(join(tmpdir(), 'agenda-'));
-    const salida = join(carpeta, 'salida.json');
+/**
+ * Lanza una mini app del agente con `open` y devuelve el JSON que imprime.
+ * Va con `open` (y no ejecutando el binario) para que macOS la trate como
+ * responsable de sus propios permisos, no a node.
+ */
+export async function lanzarMiniApp<T>(run: Ejecutor, app: string, args: string[], timeoutMs = 20_000): Promise<T> {
+  const carpeta = await mkdtemp(join(tmpdir(), 'miniapp-'));
+  const salida = join(carpeta, 'salida.json');
+  try {
     try {
-      try {
-        await run('open', ['-n', '-W', '-g', '--stdout', salida, '--stderr', salida, app, '--args', ...args], { timeoutMs });
-      } catch (e) {
-        // Si la app termina antes de que `open -W` empiece a vigilarla, open falla con
-        // "kevent() failed: No such process" aunque la respuesta ya quedó escrita.
-        if (!/kevent\(\) failed|No such process/.test((e as Error).message)) throw e;
-      }
-      const texto = (await readFile(salida, 'utf8')).trim();
-      let datos: unknown;
-      try {
-        datos = JSON.parse(texto);
-      } catch {
-        throw new ErrorDeAccion(`La agenda respondió algo inesperado: ${texto.slice(0, 200)}`, 502);
-      }
-      if (datos && typeof datos === 'object' && 'error' in datos) {
-        throw new ErrorDeAccion(String((datos as { error: unknown }).error), 409);
-      }
-      return datos as T;
-    } finally {
-      await rm(carpeta, { recursive: true, force: true });
+      await run('open', ['-n', '-W', '-g', '--stdout', salida, '--stderr', salida, app, '--args', ...args], { timeoutMs });
+    } catch (e) {
+      // Si la app termina antes de que `open -W` empiece a vigilarla, open falla con
+      // "kevent() failed: No such process" aunque la respuesta ya quedó escrita.
+      if (!/kevent\(\) failed|No such process/.test((e as Error).message)) throw e;
     }
+    const texto = (await readFile(salida, 'utf8')).trim();
+    let datos: unknown;
+    try {
+      datos = JSON.parse(texto);
+    } catch {
+      throw new ErrorDeAccion(`La mini app respondió algo inesperado: ${texto.slice(0, 200)}`, 502);
+    }
+    if (datos && typeof datos === 'object' && 'error' in datos) {
+      throw new ErrorDeAccion(String((datos as { error: unknown }).error), 409);
+    }
+    return datos as T;
+  } finally {
+    await rm(carpeta, { recursive: true, force: true });
   }
+}
+
+export function crearAgenda(app: string, run: Ejecutor): Agenda {
+  const llamar = <T>(args: string[], timeoutMs?: number) => lanzarMiniApp<T>(run, app, args, timeoutMs);
 
   return {
     permisos: () => llamar(['permisos']),

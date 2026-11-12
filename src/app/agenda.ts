@@ -54,14 +54,24 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
   const $ = (id: string) => document.getElementById(id)!;
   const tarjeta = $('tarjeta-agenda');
   const contenedor = $('agenda');
+  const tarjetaRecordatorios = document.getElementById('tarjeta-recordatorios');
+  const contenedorRecordatorios = document.getElementById('agenda-recordatorios');
+  const cuentaRecordatorios = document.getElementById('recordatorios-cuenta');
   const aviso = $('aviso-recordatorio');
   let temporizador: number | undefined;
   let avisoActual: Aviso | null = null;
   const anunciados = new Set<string>();
 
-  function lista(titulo: string, items: { hora: string; texto: string; clase?: string }[]) {
-    const h = document.createElement('h3');
-    h.textContent = titulo;
+  function lista(
+    destino: HTMLElement,
+    titulo: string | null,
+    items: { hora: string; texto: string; clase?: string }[],
+  ) {
+    if (titulo) {
+      const h = document.createElement('h3');
+      h.textContent = titulo;
+      destino.appendChild(h);
+    }
     const ul = document.createElement('ul');
     for (const it of items) {
       const li = document.createElement('li');
@@ -73,7 +83,7 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
       li.append(t, span);
       ul.appendChild(li);
     }
-    contenedor.append(h, ul);
+    destino.appendChild(ul);
   }
 
   function pintarPermiso(permisos: RespuestaAgenda['permisos']) {
@@ -109,25 +119,35 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     contenedor.textContent = '';
     const ahora = new Date();
     if (r.permisos.calendario !== 'concedido' || r.permisos.recordatorios !== 'concedido') pintarPermiso(r.permisos);
+
     if (r.permisos.calendario === 'concedido') {
       const { hoy, manana } = agruparEventos(r.eventos, ahora);
       const fila = (e: Evento) => ({ hora: e.todoElDia ? 'Todo' : formatoHora.format(new Date(e.inicio)), texto: e.titulo });
-      if (hoy.length) lista('Hoy', hoy.map(fila));
-      else lista('Hoy', [{ hora: '—', texto: 'Nada en el calendario' }]);
-      if (manana.length) lista('Mañana', manana.map(fila));
+      lista(contenedor, 'Hoy', hoy.length ? hoy.map(fila) : [{ hora: '', texto: 'Nada en el calendario', clase: 'vacio' }]);
+      if (manana.length) lista(contenedor, 'Mañana', manana.map(fila));
     }
-    if (r.permisos.recordatorios === 'concedido' && r.recordatorios.length) {
-      lista(
-        'Pendientes',
-        r.recordatorios.map((x) => {
-          const vence = x.vence ? new Date(x.vence) : null;
-          return {
-            hora: vence ? (mismoDia(vence, ahora) ? formatoHora.format(vence) : `${vence.getDate()}/${vence.getMonth() + 1}`) : '·',
-            texto: x.titulo,
-            clase: vence && vence < ahora ? 'vencido' : undefined,
-          };
-        }),
-      );
+
+    if (tarjetaRecordatorios && contenedorRecordatorios) {
+      const permitido = r.permisos.recordatorios === 'concedido';
+      tarjetaRecordatorios.hidden = !permitido;
+      contenedorRecordatorios.textContent = '';
+      if (cuentaRecordatorios) cuentaRecordatorios.textContent = String(r.recordatorios.length);
+      if (permitido) {
+        lista(
+          contenedorRecordatorios,
+          null,
+          r.recordatorios.length
+            ? r.recordatorios.map((x) => {
+                const vence = x.vence ? new Date(x.vence) : null;
+                return {
+                  hora: vence ? (mismoDia(vence, ahora) ? formatoHora.format(vence) : `${vence.getDate()}/${vence.getMonth() + 1}`) : '',
+                  texto: x.titulo,
+                  clase: vence && vence < ahora ? 'vencido' : undefined,
+                };
+              })
+            : [{ hora: '', texto: 'Todo al día', clase: 'vacio' }],
+        );
+      }
     }
   }
 

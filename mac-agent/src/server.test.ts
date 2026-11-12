@@ -57,7 +57,7 @@ test('salud no pide token; estado sí', async () => {
   assert.equal((await fetch(`${base}/estado`, { headers: { Authorization: 'Bearer malo' } })).status, 401);
   const r = await fetch(`${base}/estado`, { headers: auth });
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { ...estadoFalso, avisos: [] });
+  assert.deepEqual(await r.json(), { ...estadoFalso, avisos: [], fondo: null });
 });
 
 test('CORS: permite el dominio y rechaza otros orígenes', async () => {
@@ -191,48 +191,73 @@ test('/agenda: 404 sin agenda; con agenda devuelve permisos, eventos y recordato
   s.close();
 });
 
-test('GET /fondo: 401 sin auth, 404 si no hay fondo, 200 con imagen y cabeceras correctas', async () => {
-  const tmpCarpeta = mkdtempSync(join(tmpdir(), 'fondo-test-'));
-  const rutaFondo = join(tmpCarpeta, 'fondo.png');
-  const bufferEsperado = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  writeFileSync(rutaFondo, bufferEsperado);
+test('GET /fondo: pide token; sirve el fondo real y su versión de vidrio; la firma viaja en /estado', async () => {
+  const pedidas: string[] = [];
+  let hayFondo = true;
+  const s = crearServidor({
+    config,
+    monitor: { leer: async () => estadoFalso },
+    acciones: crearAcciones(config, async () => ''),
+    fondo: {
+      firma: 'abc123',
+      imagen: async (variante) => {
+        pedidas.push(variante);
+        return hayFondo ? { datos: Buffer.from(`jpeg-${variante}`), firma: `etag-${variante}` } : null;
+      },
+    },
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  try {
+    assert.equal((await fetch(`${b}/fondo`)).status, 401);
 
+    const nitido = await fetch(`${b}/fondo`, { headers: auth });
+    assert.equal(nitido.status, 200);
+    assert.equal(nitido.headers.get('content-type'), 'image/jpeg');
+    assert.equal(nitido.headers.get('etag'), '"etag-fondo"');
+    assert.equal(nitido.headers.get('x-fondo'), 'abc123');
+    assert.equal(await nitido.text(), 'jpeg-fondo');
+
+    const vidrio = await fetch(`${b}/fondo?v=vidrio`, { headers: auth });
+    assert.equal(await vidrio.text(), 'jpeg-vidrio');
+    assert.deepEqual(pedidas, ['fondo', 'vidrio']);
+
+    const estado = (await (await fetch(`${b}/estado`, { headers: auth })).json()) as { fondo: string };
+    assert.equal(estado.fondo, 'abc123');
+
+    hayFondo = false;
+    assert.equal((await fetch(`${b}/fondo`, { headers: auth })).status, 404);
+  } finally {
+    s.close();
+  }
+});
+
+test('GET /fondo sin mini app: respaldo con la imagen del sistema, sin vidrio, y 404 limpio si no hay', async () => {
+  const tmpCarpeta = mkdtempSync(join(tmpdir(), 'fondo-test-'));
   let rutaFondoConfigurada: string | null = null;
   const s = crearServidor({
     config,
-    monitor: {
-      leer: async () => estadoFalso,
-      leerFondo: async () => rutaFondoConfigurada,
-    },
+    monitor: { leer: async () => estadoFalso, leerFondo: async () => rutaFondoConfigurada },
     acciones: crearAcciones(config, async () => ''),
     log: () => {},
   });
   await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
   const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
-
   try {
-    // 401 sin token
-    assert.equal((await fetch(`${b}/fondo`)).status, 401);
-
-    // 404 si leerFondo devuelve null
     const r404 = await fetch(`${b}/fondo`, { headers: auth });
     assert.equal(r404.status, 404);
     assert.deepEqual(await r404.json(), { error: 'Fondo no encontrado' });
 
-    // 404 si el archivo no existe en disco
     rutaFondoConfigurada = join(tmpCarpeta, 'no-existe.jpg');
-    const rNoExiste = await fetch(`${b}/fondo`, { headers: auth });
-    assert.equal(rNoExiste.status, 404);
+    assert.equal((await fetch(`${b}/fondo`, { headers: auth })).status, 404);
 
-    // 200 con archivo real
-    rutaFondoConfigurada = rutaFondo;
-    const r200 = await fetch(`${b}/fondo`, { headers: auth });
-    assert.equal(r200.status, 200);
-    assert.equal(r200.headers.get('content-type'), 'image/png');
-    assert.equal(r200.headers.get('cache-control'), 'max-age=60');
-    assert.ok(r200.headers.get('access-control-allow-origin'));
-    const arrayBuffer = await r200.arrayBuffer();
-    assert.deepEqual(Buffer.from(arrayBuffer), bufferEsperado);
+    // Un archivo que no es una imagen de verdad no rompe nada: 404.
+    rutaFondoConfigurada = join(tmpCarpeta, 'roto.png');
+    writeFileSync(rutaFondoConfigurada, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    assert.equal((await fetch(`${b}/fondo`, { headers: auth })).status, 404);
+
+    assert.equal((await fetch(`${b}/fondo?v=vidrio`, { headers: auth })).status, 404);
   } finally {
     s.close();
     rmSync(tmpCarpeta, { recursive: true, force: true });
