@@ -49,7 +49,13 @@ export function crearAgenda(app: string, run: Ejecutor): Agenda {
     const carpeta = await mkdtemp(join(tmpdir(), 'agenda-'));
     const salida = join(carpeta, 'salida.json');
     try {
-      await run('open', ['-n', '-W', '-g', '--stdout', salida, '--stderr', salida, app, '--args', ...args], { timeoutMs });
+      try {
+        await run('open', ['-n', '-W', '-g', '--stdout', salida, '--stderr', salida, app, '--args', ...args], { timeoutMs });
+      } catch (e) {
+        // Si la app termina antes de que `open -W` empiece a vigilarla, open falla con
+        // "kevent() failed: No such process" aunque la respuesta ya quedó escrita.
+        if (!/kevent\(\) failed|No such process/.test((e as Error).message)) throw e;
+      }
       const texto = (await readFile(salida, 'utf8')).trim();
       let datos: unknown;
       try {

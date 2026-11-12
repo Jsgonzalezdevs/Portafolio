@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Ejecutor } from './ejecutor.ts';
-import { cifrarUrl, descifrarUrl, Publicador, ultimaUrlDelLog } from './publicador.ts';
+import { cifrarUrl, descifrarUrl, FALLOS_PARA_REINICIAR, Publicador, ultimaUrlDelLog } from './publicador.ts';
 
 const TOKEN = 'd'.repeat(64);
 
@@ -65,4 +65,40 @@ test('publica solo si la URL es nueva y funciona; un único commit forzado en su
   const pushes = llamadas.filter((l) => l.includes('push'));
   assert.ok(pushes.every((p) => p.includes('-f') && p.at(-1) === 'HEAD:refs/heads/agente'));
   assert.ok(llamadas.some((l) => l.includes('--orphan')), 'rama huérfana: no arrastra el historial de main');
+});
+
+test('reinicia el túnel solo tras varios fallos seguidos, o si Cloudflare lo dio por expirado', async () => {
+  const carpetaBase = await mkdtemp(join(tmpdir(), 'pub2-'));
+  const rutaLog = join(carpetaBase, 'tunel.log');
+  const reinicios: string[][] = [];
+  const run: Ejecutor = async (bin, args) => {
+    if (bin === 'launchctl') reinicios.push(args);
+    if (args[0] === 'init') {
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(join(args[2], '.git'), { recursive: true });
+    }
+    return '';
+  };
+  let viva = false;
+  const pub = new Publicador({
+    token: TOKEN, rutaLog, carpeta: join(carpetaBase, 'repo'), remoto: 'https://github.com/x/y.git', rama: 'agente', run,
+    comprobar: async () => viva,
+  });
+  // Error viejo ANTES de la URL actual: no cuenta.
+  await writeFile(rutaLog, 'ERR Unauthorized: Tunnel not found\nhttps://nueva.trycloudflare.com\n');
+  for (let i = 0; i < FALLOS_PARA_REINICIAR - 1; i++) await pub.revisar();
+  assert.equal(reinicios.length, 0, 'un par de cortes sueltos no reinician');
+  viva = true;
+  await pub.revisar(); // se recupera: el contador vuelve a cero
+  viva = false;
+  for (let i = 0; i < FALLOS_PARA_REINICIAR - 1; i++) await pub.revisar();
+  assert.equal(reinicios.length, 0);
+  await pub.revisar();
+  assert.equal(reinicios.length, 1, 'caído varios minutos seguidos: reinicia');
+  assert.equal(reinicios[0][0], 'kickstart');
+
+  // Expirado DESPUÉS de la URL actual: reinicia de inmediato.
+  await writeFile(rutaLog, 'https://nueva.trycloudflare.com\nERR Unauthorized: Tunnel not found\n');
+  await pub.revisar();
+  assert.equal(reinicios.length, 2);
 });

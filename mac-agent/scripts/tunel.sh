@@ -80,6 +80,10 @@ cat > "$PLIST" <<EOF
     <string>$BIN</string>
     <string>tunnel</string>
     <string>--no-autoupdate</string>
+    <!-- HTTP/2 (TCP) en vez de QUIC (UDP): en redes caseras QUIC se corta con
+         "no recent network activity", el túnel se cierra y cambia de URL. -->
+    <string>--protocol</string>
+    <string>http2</string>
     <string>--url</string>
     <string>http://127.0.0.1:8787</string>
   </array>

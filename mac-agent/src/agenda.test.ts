@@ -97,3 +97,17 @@ test('quita eventos duplicados entre calendarios y resume en texto compacto', ()
   );
   assert.equal(resumirEventos([]), 'Sin eventos en ese rango.');
 });
+
+test('si `open -W` pierde de vista a la app (kevent), igual lee la respuesta escrita', async () => {
+  const run: Ejecutor = async (_bin, args) => {
+    const salida = args[args.indexOf('--stdout') + 1];
+    await writeFile(salida, JSON.stringify({ calendario: 'concedido', recordatorios: 'concedido' }));
+    throw new Error('Unable to block on applications (initial call to kevent() failed: No such process)');
+  };
+  assert.deepEqual(await crearAgenda('/x.app', run).permisos(), { calendario: 'concedido', recordatorios: 'concedido' });
+
+  const otroError: Ejecutor = async () => {
+    throw new Error('LSOpenURLsWithRole() failed');
+  };
+  await assert.rejects(crearAgenda('/x.app', otroError).permisos(), /LSOpenURLsWithRole/);
+});

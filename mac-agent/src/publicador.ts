@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import type { Ejecutor } from './ejecutor.ts';
 
@@ -57,8 +58,12 @@ interface Opciones {
   log?: (linea: string) => void;
 }
 
+/** Chequeos fallidos seguidos (uno por minuto) antes de reiniciar el túnel. */
+export const FALLOS_PARA_REINICIAR = 3;
+
 export class Publicador {
   private publicada: string | null = null;
+  private fallosSeguidos = 0;
   private readonly o: Opciones;
 
   constructor(opciones: Opciones) {
@@ -83,20 +88,30 @@ export class Publicador {
   async revisar(): Promise<string | null> {
     const contenido = await readFile(this.o.rutaLog, 'utf8').catch(() => '');
     const url = ultimaUrlDelLog(contenido);
+    if (!url) return null;
 
-    // Si el túnel expiró en Cloudflare o está caído, lo reinicia para que genere una nueva URL
-    if (contenido.includes('Unauthorized: Tunnel not found') || (url && !(await this.comprobar(url)))) {
-      try {
-        await this.o.run('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/lat.juliangonzalez.tunel`]);
-        this.o.log?.('túnel caído detectado: reiniciado con launchctl kickstart');
-      } catch {
-        // Ignora fallo si no corre como launchd
+    // Solo cuenta lo escrito DESPUÉS de la URL actual: un error viejo del log
+    // no debe reiniciar un túnel que ya se recuperó.
+    const desdeUrlActual = contenido.slice(contenido.lastIndexOf(url));
+    const expirado = desdeUrlActual.includes('Unauthorized: Tunnel not found');
+    if (expirado || !(await this.comprobar(url))) {
+      this.fallosSeguidos += 1;
+      // Un corte suelto de red no reinicia: cada reinicio cambia la URL y obliga
+      // a la tablet a reconectarse. Solo si sigue caído varios minutos.
+      if (expirado || this.fallosSeguidos >= FALLOS_PARA_REINICIAR) {
+        this.fallosSeguidos = 0;
+        try {
+          await this.o.run('launchctl', ['kickstart', '-k', `gui/${userInfo().uid}/lat.juliangonzalez.tunel`]);
+          this.o.log?.(`túnel ${expirado ? 'expirado' : 'sin respuesta'}: reiniciado`);
+        } catch {
+          // Sin launchd (pruebas o ejecución manual): no hay nada que reiniciar.
+        }
       }
       return null;
     }
+    this.fallosSeguidos = 0;
 
-    if (!url || url === this.publicada) return null;
-    // Una URL vieja del log (túnel caído) no se publica: el panel la descartaría igual.
+    if (url === this.publicada) return null;
     if (!(await this.comprobar(url))) return null;
 
     const archivo = join(this.o.carpeta, 'agente.json');
