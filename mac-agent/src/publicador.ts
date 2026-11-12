@@ -58,6 +58,14 @@ interface Opciones {
   log?: (linea: string) => void;
 }
 
+/**
+ * La rama de la dirección vive en el mismo repo que el sitio, y Vercel intenta construir cada
+ * rama que recibe un push: sin esto, cada publicación dejaba un despliegue en «Error»
+ * («vite: command not found», porque la rama solo tiene un archivo) y gastaba el cupo diario
+ * de despliegues. Con este archivo en la propia rama, Vercel no la despliega.
+ */
+export const VERCEL_JSON = `${JSON.stringify({ git: { deploymentEnabled: { agente: false } }, ignoreCommand: 'exit 0' }, null, 2)}\n`;
+
 /** Chequeos fallidos seguidos (uno por minuto) antes de reiniciar el túnel. */
 export const FALLOS_PARA_REINICIAR = 3;
 
@@ -121,7 +129,8 @@ export class Publicador {
       await this.git('checkout', '-q', '--orphan', this.o.rama);
     }
     await writeFile(archivo, `${JSON.stringify(cifrarUrl(url, this.o.token), null, 2)}\n`);
-    await this.git('add', 'agente.json');
+    await writeFile(join(this.o.carpeta, 'vercel.json'), VERCEL_JSON);
+    await this.git('add', 'agente.json', 'vercel.json');
     const yaHayCommit = await this.git('rev-parse', '--verify', '-q', 'HEAD').then(
       () => true,
       () => false,

@@ -82,5 +82,10 @@
       "source": "/:path*",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "agente": false
+    }
+  }
 }

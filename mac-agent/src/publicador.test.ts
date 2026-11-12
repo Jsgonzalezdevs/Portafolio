@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Ejecutor } from './ejecutor.ts';
-import { cifrarUrl, descifrarUrl, FALLOS_PARA_REINICIAR, Publicador, ultimaUrlDelLog } from './publicador.ts';
+import { cifrarUrl, descifrarUrl, FALLOS_PARA_REINICIAR, Publicador, ultimaUrlDelLog, VERCEL_JSON } from './publicador.ts';
 
 const TOKEN = 'd'.repeat(64);
 
@@ -52,6 +52,13 @@ test('publica solo si la URL es nueva y funciona; un único commit forzado en su
   const json = JSON.parse(await readFile(join(carpeta, 'agente.json'), 'utf8'));
   assert.equal(descifrarUrl(json, TOKEN), 'https://uno.trycloudflare.com');
   assert.equal(await pub.revisar(), null, 'misma URL: no vuelve a publicar');
+
+  // La rama lleva su vercel.json para que Vercel no intente construirla (y falle) en cada publicación.
+  assert.equal(await readFile(join(carpeta, 'vercel.json'), 'utf8'), VERCEL_JSON);
+  const reglas = JSON.parse(VERCEL_JSON);
+  assert.deepEqual(reglas.git.deploymentEnabled, { agente: false });
+  assert.equal(reglas.ignoreCommand, 'exit 0');
+  assert.ok(llamadas.some((l) => l.includes('add') && l.includes('agente.json') && l.includes('vercel.json')));
 
   await writeFile(rutaLog, 'https://uno.trycloudflare.com\nhttps://muerta.trycloudflare.com\n');
   assert.equal(await pub.revisar(), null, 'URL que no responde: no se publica');
