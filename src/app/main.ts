@@ -707,6 +707,20 @@ async function iniciar(e: Emparejamiento) {
   $('tarjeta-chat').hidden = !catalogo.chat;
   agendaUI.activar(Boolean(catalogo.agenda));
   $('pantalla-panel').classList.toggle('panel--sin-chat', !catalogo.chat);
+
+  const tabChat = document.getElementById('tab-chat');
+  const dotChat = document.getElementById('dot-chat');
+  const paginaChat = document.getElementById('pagina-chat');
+  if (tabChat) tabChat.hidden = !catalogo.chat;
+  if (dotChat) dotChat.hidden = !catalogo.chat;
+  if (paginaChat) paginaChat.hidden = !catalogo.chat;
+
+  const tabAgenda = document.getElementById('tab-agenda');
+  const dotAgenda = document.getElementById('dot-agenda');
+  const paginaAgenda = document.getElementById('pagina-agenda');
+  if (tabAgenda) tabAgenda.hidden = !catalogo.agenda;
+  if (dotAgenda) dotAgenda.hidden = !catalogo.agenda;
+  if (paginaAgenda) paginaAgenda.hidden = !catalogo.agenda;
   $('pantalla-emparejar').hidden = true;
   $('pantalla-panel').hidden = false;
   void mantenerPantalla();
@@ -834,9 +848,62 @@ iniciarChat({
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
 });
 
+// ---------- Carrusel deslizable y navegación de páginas ----------
+function inicializarCarrusel() {
+  const carrusel = document.getElementById('panel-carrusel');
+  if (!carrusel) return;
+
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-tab'));
+  const dots = Array.from(document.querySelectorAll<HTMLElement>('.dot'));
+
+  const actualizarPaginacion = (indice: number) => {
+    tabs.forEach((tab) => {
+      const p = Number(tab.dataset.pagina);
+      tab.classList.toggle('nav-tab--activo', p === indice);
+    });
+    dots.forEach((dot) => {
+      const p = Number(dot.dataset.pagina);
+      dot.classList.toggle('dot--activo', p === indice);
+    });
+  };
+
+  const irAPagina = (indice: number) => {
+    const ancho = carrusel.clientWidth;
+    carrusel.scrollTo({ left: indice * ancho, behavior: 'smooth' });
+    actualizarPaginacion(indice);
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const p = Number(tab.dataset.pagina);
+      if (!Number.isNaN(p)) irAPagina(p);
+    });
+  });
+
+  dots.forEach((dot) => {
+    dot.addEventListener('click', () => {
+      const p = Number(dot.dataset.pagina);
+      if (!Number.isNaN(p)) irAPagina(p);
+    });
+  });
+
+  let tScroll: number | undefined;
+  carrusel.addEventListener('scroll', () => {
+    clearTimeout(tScroll);
+    tScroll = window.setTimeout(() => {
+      const ancho = carrusel.clientWidth;
+      if (ancho > 0) {
+        const indice = Math.round(carrusel.scrollLeft / ancho);
+        actualizarPaginacion(indice);
+      }
+    }, 60);
+  });
+}
+
 // ---------- Arranque ----------
 async function arrancar() {
   pintarReloj();
+  inicializarCarrusel();
   const desdeHash = emparejamientoDesdeHash(location.hash);
   if (desdeHash) history.replaceState(null, '', location.pathname); // el token no se queda en la barra ni en el historial
   const guardado = desdeHash ?? cargarEmparejamiento();

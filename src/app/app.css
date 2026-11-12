@@ -76,54 +76,149 @@ code { background: rgba(255, 255, 255, 0.08); padding: 2px 6px; border-radius: 6
   box-shadow: var(--sombra-tarjeta);
 }
 
-/* Panel: pensado para 1280×800 en horizontal; en vertical pasa a una columna. */
+/* Panel: carrusel deslizable estilo Apple (pantallas hacia los lados con scroll-snap) */
 .panel {
   height: 100vh;
-  padding: 16px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Barra de navegación superior estilo pestañas Apple */
+.panel__nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(11, 13, 18, 0.75);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--tenue);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 38px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-tab:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.nav-tab--activo {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #06101f;
+  font-weight: 600;
+}
+
+/* Contenedor carrusel horizontal con scroll-snap nativo para Chrome 106 */
+.panel__carrusel {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Cada pantalla/página ocupa el 100% de la tablet y permite scroll vertical si hace falta */
+.pagina {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  padding: 16px 20px 72px 20px;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  grid-template-columns: 1.1fr 1fr 1fr;
-  grid-template-rows: auto 1fr 1fr;
-  grid-template-areas:
-    'reloj   ahora   control'
-    'chat    mac     escenas'
-    'chat    agenda  agenda';
+}
+
+.pagina__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.pagina--chat #tarjeta-chat {
+  height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
+}
+
+.pagina--agenda #tarjeta-agenda {
+  min-height: 320px;
+}
+
+@media (orientation: portrait), (max-width: 900px) {
+  .pagina__grid {
+    grid-template-columns: 1fr;
+  }
+  .pagina {
+    padding: 12px 14px 64px 14px;
+  }
+  .panel__reloj {
+    padding: 8px 4px;
+  }
+  .pagina--chat #tarjeta-chat {
+    height: calc(100vh - 140px);
+  }
+}
+
+/* Indicador de páginas estilo Apple (dots) */
+.panel__paginador {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: all 0.25s ease;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dot--activo {
+  width: 24px;
+  background: var(--acento);
 }
 
 .panel__reloj {
-  grid-area: reloj;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 0 12px;
-}
-
-#tarjeta-ahora { grid-area: ahora; overflow-y: auto; }
-#tarjeta-mac { grid-area: mac; }
-#tarjeta-control { grid-area: control; }
-#tarjeta-escenas { grid-area: escenas; overflow-y: auto; }
-#tarjeta-agenda { grid-area: agenda; overflow-y: auto; }
-#tarjeta-chat { grid-area: chat; }
-
-/* Sin chat (agente sin IA), el reloj ocupa las filas de la primera columna */
-.panel--sin-chat {
-  grid-template-areas:
-    'reloj   ahora   control'
-    'reloj   mac     escenas'
-    'reloj   agenda  agenda';
-}
-
-@media (orientation: portrait), (max-width: 900px) {
-  html, body { overflow: auto; }
-  .panel {
-    height: auto;
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    grid-template-areas: 'reloj' 'ahora' 'chat' 'control' 'mac' 'escenas' 'agenda';
-  }
-  .panel__reloj { padding: 12px 4px; }
-  .panel--sin-chat { grid-template-areas: 'reloj' 'ahora' 'control' 'mac' 'escenas' 'agenda'; }
-  .chat { height: 60vh; }
 }
 
 .hora {
