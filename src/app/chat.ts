@@ -29,6 +29,10 @@ interface PuenteNativo {
   hablar(texto: string, escucharDespues: boolean): void;
   listo(): void;
   ajustes(): void;
+  /** Modo noche: brillo mínimo de la pantalla (true) o el normal del sistema (false). */
+  brillo?(noche: boolean): void;
+  /** Batería de la tablet como JSON: { nivel, cargando, enchufada, temperaturaC }. */
+  bateria?(): string;
 }
 
 interface EventoNativo {

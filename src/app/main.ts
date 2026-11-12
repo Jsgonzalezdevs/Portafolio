@@ -15,7 +15,9 @@ import {
 import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
 import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
-import { bytes, duracion, esDeNoche, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
+import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
+import { desplazamientoHora, nocheActiva } from './noche';
+import { bytes, duracion, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
 
 export interface PlaylistRapida {
   id: string;
@@ -108,6 +110,8 @@ let temporizadorProgreso: number | undefined;
 function iniciarTemporizadorProgreso() {
   if (temporizadorProgreso !== undefined) return;
   temporizadorProgreso = window.setInterval(() => {
+    // De noche el panel está apagado: no se repinta lo que nadie ve (al despertar llega el estado nuevo).
+    if (nocheAplicada) return;
     if (duracionLocalSeg > 0 && posicionLocalSeg < duracionLocalSeg) {
       posicionLocalSeg += 1;
       if (!tocandoProgreso) {
@@ -206,8 +210,12 @@ function pintarReloj() {
   $('dock-dia').textContent = String(ahora.getDate());
   $('calendario-dia-semana').textContent = semana;
   $('calendario-dia').textContent = String(ahora.getDate());
-  const noche = (nocheManual ?? esDeNoche(ahora)) && Date.now() > despiertoHasta;
-  $('noche').hidden = !noche || !emparejamiento;
+  aplicarNoche();
+  if (nocheAplicada) {
+    // Un poco de movimiento cada minuto: un LCD que muestra lo mismo toda la noche puede marcarse.
+    const d = desplazamientoHora(ahora);
+    $('noche-hora').style.transform = `translate(${d.x}rem, ${d.y}rem)`;
+  }
 
   actualizarAhora();
 
@@ -215,19 +223,43 @@ function pintarReloj() {
   window.setTimeout(pintarReloj, 60_000 - (Date.now() % 60_000) + 50);
 }
 
+// ---------- Modo noche ----------
+let nocheAplicada = false;
+let temporizadorDespertar: number | undefined;
+let flujoLento = false;
+
+/**
+ * Única función que enciende y apaga el modo noche. De noche: pantalla negra con solo la hora,
+ * panel de debajo sin pintar, brillo al mínimo (en la app Android) y consultas a la Mac cada 30 s.
+ */
+function aplicarNoche() {
+  const activa = nocheActiva({ manual: nocheManual, ahora: new Date(), despiertoHasta, emparejado: Boolean(emparejamiento) });
+  $('noche').hidden = !activa;
+  if (activa === nocheAplicada) return;
+  nocheAplicada = activa;
+  document.body.classList.toggle('noche-activa', activa);
+  puenteNativo()?.brillo?.(activa);
+  ritmoEstado(activa);
+  if (!activa) pedirAlineacion();
+}
+
+/** Despierta el panel unos instantes (toque, palabra clave, alarma, recordatorio) y vuelve solo a la noche. */
+function despertarPanel(ms: number) {
+  despiertoHasta = Date.now() + ms;
+  clearTimeout(temporizadorDespertar);
+  temporizadorDespertar = window.setTimeout(aplicarNoche, ms + 100);
+  aplicarNoche();
+}
+
 $('boton-noche').addEventListener('click', () => {
   nocheManual = true;
   despiertoHasta = 0;
-  $('noche').hidden = false;
+  aplicarNoche();
 });
 $('noche').addEventListener('click', () => {
   // Tocar en modo noche despierta el panel un minuto; si era manual, lo apaga.
   if (nocheManual) nocheManual = null;
-  despiertoHasta = Date.now() + 60_000;
-  $('noche').hidden = true;
-  window.setTimeout(() => {
-    if (Date.now() >= despiertoHasta && esDeNoche(new Date())) $('noche').hidden = !emparejamiento;
-  }, 60_500);
+  despertarPanel(60_000);
 });
 
 // ---------- Tarjeta Ahora ----------
@@ -977,8 +1009,7 @@ function mostrarAlarmaSonando(activas: Alarma[]) {
   $('alarma-sonando-titulo').textContent = a.titulo;
   aviso.hidden = false;
   // Despierta el panel si estaba en modo noche.
-  despiertoHasta = Date.now() + 120_000;
-  $('noche').hidden = true;
+  despertarPanel(120_000);
   sonarAlarma(a);
   clearInterval(temporizadorSonido);
   temporizadorSonido = window.setInterval(() => sonarAlarma(a), 4000);
@@ -996,7 +1027,7 @@ $('alarma-detener').addEventListener('click', () => {
 // ---------- Emparejamiento ----------
 function mostrarEmparejar(error = '') {
   $('pantalla-panel').hidden = true;
-  $('noche').hidden = true;
+  aplicarNoche();
   $('pantalla-emparejar').hidden = false;
   $('error-emparejar').textContent = error;
 }
@@ -1052,14 +1083,26 @@ async function iniciar(e: Emparejamiento) {
     }
   }, 60_000);
 
+  abrirEstado(e);
+}
+
+/** Abre el enlace con la Mac al ritmo que toque (normal, o lento si es de noche). */
+function abrirEstado(e: Emparejamiento) {
   cerrarFlujo?.();
   cerrarFlujo = abrirFlujo(e, {
+    lento: flujoLento,
     alEvento: (ev) => {
       if (ev.evento === 'estado') pintarEstado(JSON.parse(ev.datos) as EstadoMac);
     },
     alCambioConexion: pintarConexion,
     alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
   });
+}
+
+function ritmoEstado(lento: boolean) {
+  if (flujoLento === lento) return;
+  flujoLento = lento;
+  if (emparejamiento && cerrarFlujo) abrirEstado(emparejamiento);
 }
 
 $<HTMLFormElement>('form-emparejar').addEventListener('submit', async (ev) => {
@@ -1135,11 +1178,24 @@ if (nativo) {
   window.addEventListener('asistente-nativo', (ev) => {
     const tipo = (ev as CustomEvent<{ tipo: string }>).detail.tipo;
     if (tipo === 'palabra' || tipo === 'escuchando') {
-      despiertoHasta = Date.now() + 60_000;
-      $('noche').hidden = true;
+      despertarPanel(60_000);
     }
   });
 }
+
+// Batería de la tablet: lectura inicial y avisos de la app cuando cambia algo (fuera de la app no llega nada).
+const puenteBateria = puenteNativo();
+if (puenteBateria?.bateria) {
+  try {
+    pintarTablet(leerBateria(JSON.parse(puenteBateria.bateria())));
+  } catch {
+    /* app vieja o sin dato */
+  }
+}
+window.addEventListener('asistente-nativo', (ev) => {
+  const d = (ev as CustomEvent<{ tipo: string }>).detail;
+  if (d.tipo === 'bateria') pintarTablet(leerBateria(d));
+});
 
 const agendaUI = iniciarAgenda({
   emparejamiento: () => emparejamiento,
@@ -1150,10 +1206,7 @@ const agendaUI = iniciarAgenda({
     u.lang = 'es-CO';
     window.speechSynthesis?.speak(u);
   },
-  despertar: () => {
-    despiertoHasta = Date.now() + 60_000;
-    $('noche').hidden = true;
-  },
+  despertar: () => despertarPanel(60_000),
 });
 
 iniciarChat({
@@ -1164,6 +1217,67 @@ iniciarChat({
   emparejamiento: () => emparejamiento,
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
 });
+
+// ---------- Cuidado de la tablet ----------
+const CLAVE_MAXIMO = 'asistente.alMaximoDesde';
+let bateriaTablet: Bateria | null = null;
+
+function leerMaximoDesde(): number | null {
+  try {
+    const v = Number(localStorage.getItem(CLAVE_MAXIMO));
+    return v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarMaximoDesde(v: number | null) {
+  try {
+    if (v === null) localStorage.removeItem(CLAVE_MAXIMO);
+    else localStorage.setItem(CLAVE_MAXIMO, String(v));
+  } catch {
+    /* sin almacenamiento: el aviso de «horas al 100 %» empieza de cero tras recargar */
+  }
+}
+
+/** Batería de la tablet en la barra de menús y en «Mac y Casa». Solo existe si la app Android la entrega. */
+function pintarTablet(b: Bateria | null) {
+  bateriaTablet = b;
+  const tarjeta = $('tarjeta-tablet');
+  const item = $('menubar-tablet');
+  if (!b || b.nivel === null) {
+    tarjeta.hidden = true;
+    item.hidden = true;
+    return;
+  }
+  const ahora = Date.now();
+  const desde = seguimientoAlMaximo(b, leerMaximoDesde(), ahora);
+  guardarMaximoDesde(desde);
+  const consejo = consejoBateria(b, desde, ahora);
+
+  tarjeta.hidden = false;
+  item.hidden = false;
+  item.dataset.tono = consejo.tono;
+  item.title = `Batería de la tablet${b.temperaturaC !== null ? ` · ${Math.round(b.temperaturaC)} °C` : ''}`;
+  $('menubar-tablet-valor').textContent = `${b.nivel}%`;
+
+  $('tablet-valor').textContent = `${b.nivel}%`;
+  anillo(
+    'anillo-tablet',
+    b.nivel,
+    consejo.tono === 'alerta' ? COLOR.rojo : consejo.tono === 'aviso' ? COLOR.naranja : b.nivel <= 30 && !b.enchufada ? COLOR.naranja : COLOR.verde,
+  );
+  const temperatura = b.temperaturaC !== null ? ` · ${Math.round(b.temperaturaC)} °C` : '';
+  $('tablet-estado').textContent = `${estadoCarga(b)}${temperatura}`;
+  const textoConsejo = $('tablet-consejo');
+  textoConsejo.textContent = consejo.texto;
+  textoConsejo.dataset.tono = consejo.tono;
+}
+
+// «Lleva horas al 100 %» cuenta tiempo: se reevalúa aunque la batería no cambie.
+window.setInterval(() => {
+  if (bateriaTablet) pintarTablet(bateriaTablet);
+}, 10 * 60_000);
 
 // ---------- Pantallas, Dock y deslizamiento ----------
 let paginaActual = 'inicio';

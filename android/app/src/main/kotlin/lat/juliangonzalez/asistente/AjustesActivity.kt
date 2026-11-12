@@ -90,6 +90,24 @@ class AjustesActivity : Activity() {
         columna.addView(sensibilidad, MATCH_PARENT, WRAP_CONTENT)
         columna.addView(valor)
 
+        titulo("Brillo en modo noche")
+        val brilloValor = TextView(this)
+        val brillo = SeekBar(this).apply {
+            max = 29 // 1 % … 30 %
+            progress = prefs.brilloNochePct - 1
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, deUsuario: Boolean) {
+                    brilloValor.text = "${p + 1}% — el sistema no baja del mínimo de la pantalla"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        brilloValor.text = "${brillo.progress + 1}% — el sistema no baja del mínimo de la pantalla"
+        columna.addView(brillo, MATCH_PARENT, WRAP_CONTENT)
+        columna.addView(brilloValor)
+        nota("De 22:00 a 6:00 la pantalla se pone negra con solo la hora y baja al brillo de arriba. Un toque la despierta un minuto.")
+
         val guardar = Button(this).apply {
             text = "Guardar"
             setOnClickListener {
@@ -102,6 +120,7 @@ class AjustesActivity : Activity() {
                 prefs.accessKey = clave.text.toString()
                 prefs.palabra = opciones[palabra.selectedItemPosition]
                 prefs.sensibilidad = sensibilidad.progress / 100f
+                prefs.brilloNochePct = brillo.progress + 1
                 setResult(RESULT_OK)
                 finish()
             }

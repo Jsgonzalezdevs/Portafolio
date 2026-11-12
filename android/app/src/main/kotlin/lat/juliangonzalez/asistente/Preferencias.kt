@@ -23,6 +23,11 @@ class Preferencias(contexto: Context) {
         get() = prefs.getFloat("sensibilidad", 0.6f)
         set(v) = prefs.edit().putFloat("sensibilidad", v.coerceIn(0f, 1f)).apply()
 
+    /** Brillo de la pantalla en modo noche, en %. El sistema nunca baja de su propio mínimo. */
+    var brilloNochePct: Int
+        get() = prefs.getInt("brilloNochePct", 1)
+        set(v) = prefs.edit().putInt("brilloNochePct", v.coerceIn(1, 30)).apply()
+
     companion object {
         const val URL_POR_DEFECTO = "https://www.juliangonzalez.lat/app"
         const val PERSONALIZADA = "PERSONALIZADA"

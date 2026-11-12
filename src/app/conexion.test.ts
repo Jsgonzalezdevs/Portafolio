@@ -109,6 +109,26 @@ describe('flujo de estado', () => {
     expect(urls.every((u) => u.endsWith('/eventos'))).toBe(true);
   });
 
+  it('modo lento (noche): solo consulta /estado, sin abrir el flujo en vivo', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(url);
+      return new Response('{"cpuPct":1}', { status: 200 });
+    }));
+    const eventos: EventoSSE[] = [];
+    const cerrar = abrirFlujo(e, {
+      alEvento: (ev) => eventos.push(ev),
+      alCambioConexion: () => {},
+      alNoAutorizado: () => {},
+      lento: true,
+      tiempos: { sondeo: 20 },
+    });
+    await vi.waitFor(() => expect(eventos.length).toBeGreaterThanOrEqual(2), { timeout: 2000 });
+    cerrar();
+    expect(urls.every((u) => u.endsWith('/estado'))).toBe(true);
+    expect(eventos[0]).toEqual({ evento: 'estado', datos: '{"cpuPct":1}' });
+  });
+
   it('401 en el flujo → desemparejar', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
     let noAut = false;

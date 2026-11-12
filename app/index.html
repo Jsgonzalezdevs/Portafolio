@@ -43,6 +43,9 @@
             <span id="clima-temp">--°</span>
             <span id="clima-ciudad" class="menubar__tenue"></span>
           </span>
+          <span id="menubar-tablet" class="menubar__item menubar__tablet" data-tono="ok" hidden>
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v14h10V4zm5 15.1a.95.95 0 1 0 0 1.9.95.95 0 0 0 0-1.9z"/></svg><span id="menubar-tablet-valor">--%</span>
+          </span>
           <span id="menubar-bateria" class="menubar__item" hidden>
             <span class="pila"><i id="menubar-bateria-nivel"></i></span>
             <span id="menubar-bateria-valor">--%</span>
@@ -186,6 +189,14 @@
                 <div><dt>Memoria usada</dt><dd id="ram-detalle">–</dd></div>
                 <div><dt>Disco libre</dt><dd id="disco-detalle">–</dd></div>
               </dl>
+            </section>
+            <section id="tarjeta-tablet" class="tarjeta vidrio tablet" aria-labelledby="t-tablet" hidden>
+              <div class="anillo anillo--chico" id="anillo-tablet"><svg viewBox="0 0 64 64"><circle class="anillo__pista" cx="32" cy="32" r="26"/><circle class="anillo__arco" cx="32" cy="32" r="26"/></svg><b id="tablet-valor">–</b></div>
+              <div class="tablet__info">
+                <h2 id="t-tablet">Esta tablet</h2>
+                <p id="tablet-estado" class="tablet__estado">–</p>
+                <p id="tablet-consejo" class="tablet__consejo" data-tono="ok">–</p>
+              </div>
             </section>
           </div>
           <div class="columna">

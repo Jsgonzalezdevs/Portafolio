@@ -162,6 +162,12 @@ interface OpcionesFlujo {
   alEvento: (e: EventoSSE) => void;
   alCambioConexion: (c: EstadoConexion) => void;
   alNoAutorizado: () => void;
+  /**
+   * Ritmo de noche: sin flujo en vivo, solo consulta /estado cada 30 s. Menos red, menos CPU
+   * y menos calor en una tablet que pasa la noche encendida; las alarmas se ven igual porque
+   * duran todo su minuto.
+   */
+  lento?: boolean;
   /** Milisegundos; solo los cambian los tests. */
   tiempos?: { primerEvento?: number; silencio?: number; sondeo?: number };
 }
@@ -177,7 +183,7 @@ interface OpcionesFlujo {
  * tablet mostraría datos viejos como si fueran actuales).
  */
 export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
-  const T = { primerEvento: 8000, silencio: 15_000, sondeo: 4000, ...op.tiempos };
+  const T = { primerEvento: 8000, silencio: 15_000, sondeo: op.lento ? 30_000 : 4000, ...op.tiempos };
   let detenido = false;
   let ctrl: AbortController | null = null;
   let espera = 2000;
@@ -288,7 +294,12 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
     espera = Math.min(espera * 2, 30_000);
   };
 
-  void conectar();
+  if (op.lento) {
+    espera = 0;
+    void sondear();
+  } else {
+    void conectar();
+  }
   return () => {
     detenido = true;
     clearTimeout(vigilante);

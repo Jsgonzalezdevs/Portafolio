@@ -3,11 +3,15 @@ package lat.juliangonzalez.asistente
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -35,6 +39,8 @@ class MainActivity : Activity() {
     private val principal = Handler(Looper.getMainLooper())
     private var origen = ""
     private var urlCargada = ""
+    private var nocheNativa = false
+    private var ultimaClaveBateria: String? = null
 
     private val reintentar = Runnable { cargar() }
 
@@ -71,12 +77,18 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         pantallaCompleta()
+        ultimaClaveBateria = null
+        registerReceiver(receptorBateria, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         // Ajustes pudo cambiar la URL o la palabra clave.
         if (prefs.url != urlCargada) cargar()
         if (tienePermisoMicro()) voz.iniciar() else pedirPermisoMicro()
     }
 
     override fun onPause() {
+        try {
+            unregisterReceiver(receptorBateria)
+        } catch (_: IllegalArgumentException) {
+        }
         voz.detener()
         super.onPause()
     }
@@ -142,6 +154,49 @@ class MainActivity : Activity() {
         @JavascriptInterface fun listo() { principal.post { voz.listo() } }
 
         @JavascriptInterface fun ajustes() { principal.post { abrirAjustes() } }
+
+        /** Modo noche: brillo al mínimo (true) o el que haya elegido el usuario en el sistema (false). */
+        @JavascriptInterface fun brillo(noche: Boolean) { principal.post { aplicarBrillo(noche) } }
+
+        @JavascriptInterface fun bateria(): String = leerBateria().toString()
+    }
+
+    /**
+     * El brillo se cambia solo para la ventana de esta app (no toca el ajuste del sistema, no pide
+     * permisos y se deshace solo al salir de la app). El sistema no baja del mínimo de la pantalla.
+     */
+    private fun aplicarBrillo(noche: Boolean) {
+        nocheNativa = noche
+        val ajustes = window.attributes
+        ajustes.screenBrightness = if (noche) prefs.brilloNochePct / 100f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = ajustes
+    }
+
+    // ---------- Batería de la tablet ----------
+
+    private fun leerBateria(): JSONObject {
+        val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return JSONObject()
+        val nivel = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val escala = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+        val estado = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val temperatura = i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+        return JSONObject()
+            .put("nivel", if (nivel >= 0 && escala > 0) nivel * 100 / escala else JSONObject.NULL)
+            .put("cargando", estado == BatteryManager.BATTERY_STATUS_CHARGING)
+            .put("enchufada", i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
+            // El sistema la da en décimas de grado.
+            .put("temperaturaC", if (temperatura == Int.MIN_VALUE) JSONObject.NULL else temperatura / 10.0)
+    }
+
+    /** Avisa al panel solo cuando cambia algo que importa (el sistema avisa muy a menudo). */
+    private val receptorBateria = object : BroadcastReceiver() {
+        override fun onReceive(contexto: Context, intent: Intent) {
+            val b = leerBateria()
+            val clave = "${b.opt("nivel")}|${b.opt("cargando")}|${b.opt("enchufada")}|${Math.round(b.optDouble("temperaturaC", -99.0))}"
+            if (clave == ultimaClaveBateria) return
+            ultimaClaveBateria = clave
+            enviarALaWeb(b.put("tipo", "bateria"))
+        }
     }
 
     private fun abrirAjustes() = startActivityForResult(Intent(this, AjustesActivity::class.java), AJUSTES)
@@ -149,7 +204,10 @@ class MainActivity : Activity() {
     @Deprecated("startActivityForResult es lo disponible sin AndroidX")
     override fun onActivityResult(codigo: Int, resultado: Int, datos: Intent?) {
         super.onActivityResult(codigo, resultado, datos)
-        if (codigo == AJUSTES && resultado == RESULT_OK) voz.reconfigurar()
+        if (codigo == AJUSTES && resultado == RESULT_OK) {
+            voz.reconfigurar()
+            aplicarBrillo(nocheNativa) // por si cambió el brillo de noche
+        }
     }
 
     private inner class Cliente : WebViewClient() {

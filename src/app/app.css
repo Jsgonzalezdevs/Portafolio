@@ -823,7 +823,10 @@ input:focus { outline: none; border-color: var(--azul); }
   justify-content: center;
   background: #000;
 }
-.noche__hora { font-size: 10rem; font-weight: 200; color: #3a2a24; font-variant-numeric: tabular-nums; }
+/* Solo la hora, en ámbar apagado (menos luz azul, que desvela). */
+.noche__hora { font-size: 8rem; font-weight: 200; color: #7a4e2c; font-variant-numeric: tabular-nums; }
+/* De noche el panel de debajo no se pinta ni se calcula: menos CPU, menos calor y nada de luz. */
+.noche-activa .panel, .noche-activa #fondo-mac { display: none; }
 
 /* ---------- Avisos: arriba a la derecha, como las notificaciones de macOS ---------- */
 .aviso {
@@ -843,6 +846,19 @@ input:focus { outline: none; border-color: var(--azul); }
 .aviso.error-aviso { box-shadow: inset 0.25rem 0 0 var(--rojo), 0 0.8rem 2rem rgba(0, 0, 0, 0.5); }
 
 #boton-ajustes.presionado { background: var(--rojo); color: #fff; }
+
+/* ---------- Esta tablet (cuidado de la batería) ---------- */
+.menubar__tablet[data-tono='aviso'] { color: var(--naranja); }
+.menubar__tablet[data-tono='alerta'] { color: var(--rojo); font-weight: 600; }
+.tablet { flex: 0 0 auto; display: flex; align-items: center; gap: 1rem; }
+.anillo--chico { flex: 0 0 auto; }
+.anillo--chico svg { width: 4.2rem; height: 4.2rem; }
+.anillo--chico b { font-size: 0.95rem; }
+.tablet__info { flex: 1 1 auto; min-width: 0; }
+.tablet__estado { margin-top: 0.1rem; font-size: 0.9rem; font-weight: 500; }
+.tablet__consejo { margin-top: 0.2rem; font-size: 0.8rem; line-height: 1.3; color: var(--texto-2); }
+.tablet__consejo[data-tono='aviso'] { color: var(--naranja); }
+.tablet__consejo[data-tono='alerta'] { color: var(--rojo); }
 
 /* ---------- Vertical (teléfono o tablet de pie): una columna que se desplaza ---------- */
 @media (orientation: portrait) {

@@ -85,6 +85,22 @@ En **Voz**, elige «Personalizada».
 Sin AccessKey todo funciona igual, pero se habla tocando el botón de
 micrófono del chat.
 
+## Modo noche y cuidado de la tablet
+
+- **Modo noche** (de 22:00 a 6:00, o con el botón de la luna del Dock): pantalla negra con solo la
+  hora en ámbar apagado, y la app baja el **brillo real** al mínimo. Un toque, la palabra clave, una
+  alarma o un recordatorio la despiertan un minuto. El brillo solo se cambia para esta app (no toca
+  el ajuste del sistema y se deshace al salir). En **Voz** puedes subirlo hasta el 30 %.
+- La YT3-850F es una pantalla **LCD, no AMOLED**: el negro no apaga píxeles, solo la luz de fondo
+  baja. Por eso lo que cuenta es el brillo mínimo y no el color negro.
+- Por la noche el panel de debajo no se pinta, la hora se mueve unos píxeles cada minuto (para que
+  la pantalla no se marque) y el panel consulta a la Mac cada 30 s en vez de seguirla en vivo.
+- **Batería de la tablet**: el panel muestra su nivel y temperatura (tarjeta «Esta tablet» en
+  «Mac y Casa» y un icono en la barra de arriba) y avisa si está caliente (≥ 40 °C), si se
+  descarga sin cargador o si lleva más de 6 h al 100 % enchufada.
+- Lo que más desgasta una batería de litio es el calor y vivir al 100 %. Lo mejor es mantenerla
+  entre 40 y 80 %: un **enchufe con temporizador** (o uno Wi-Fi) es la forma de lograrlo.
+
 ## Detalles
 
 - **Uso de RAM**: unos 25 MB la app y Porcupine, más el WebView. Sin AndroidX,
