@@ -21,14 +21,17 @@ export function normalizarAgente(url: string): string {
   return u.origin;
 }
 
-/** Lee `#agente=...&token=...` (el fragmento nunca viaja al servidor) para emparejar sin teclear. */
+/**
+ * Lee `#token=...` (y opcionalmente `&agente=...`) del fragmento, que nunca
+ * viaja al servidor. Sin agente, `agente` queda vacío y se descubre solo.
+ */
 export function emparejamientoDesdeHash(hash: string): Emparejamiento | null {
   const p = new URLSearchParams(hash.replace(/^#/, ''));
   const agente = p.get('agente');
-  const token = p.get('token');
-  if (!agente || !token) return null;
+  const token = p.get('token')?.trim();
+  if (!token) return null;
   try {
-    return { agente: normalizarAgente(agente), token: token.trim() };
+    return { agente: agente ? normalizarAgente(agente) : '', token };
   } catch {
     return null;
   }
@@ -85,7 +88,12 @@ export async function consultarAgentePublicado(token: string): Promise<string | 
   }
 }
 
+/** Error de «aún no sé dónde está la Mac»: se trata como Mac sin conexión. */
+export class ErrorSinAgente extends Error {}
+
 async function llamarDirecto<T>(e: Emparejamiento, ruta: string, cuerpo?: unknown): Promise<T> {
+  // Sin dirección, fetch iría al propio sitio y devolvería la página como si fuera la Mac.
+  if (!e.agente) throw new ErrorSinAgente('Sin dirección del agente');
   const r = await fetch(`${e.agente}${ruta}`, {
     method: cuerpo === undefined ? 'GET' : 'POST',
     headers: {

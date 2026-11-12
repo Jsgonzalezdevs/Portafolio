@@ -24,7 +24,8 @@ describe('emparejamiento', () => {
       agente: 'https://agente.juliangonzalez.lat',
       token: 'abc',
     });
-    expect(emparejamientoDesdeHash('#token=abc')).toBeNull();
+    expect(emparejamientoDesdeHash('#token=abc')).toEqual({ agente: '', token: 'abc' });
+    expect(emparejamientoDesdeHash('#agente=agente.juliangonzalez.lat')).toBeNull();
     expect(emparejamientoDesdeHash('')).toBeNull();
   });
 

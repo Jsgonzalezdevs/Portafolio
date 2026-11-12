@@ -5,6 +5,7 @@ import {
   consultarAgentePublicado,
   emparejamientoDesdeHash,
   ErrorNoAutorizado,
+  ErrorSinAgente,
   guardarEmparejamiento,
   llamar,
   normalizarAgente,
@@ -884,13 +885,19 @@ $<HTMLFormElement>('form-emparejar').addEventListener('submit', async (ev) => {
   boton.disabled = true;
   $('error-emparejar').textContent = '';
   try {
-    await iniciar({
-      agente: normalizarAgente($<HTMLInputElement>('campo-agente').value),
-      token: $<HTMLInputElement>('campo-token').value.trim(),
-    });
+    const token = $<HTMLInputElement>('campo-token').value.trim();
+    const escrito = $<HTMLInputElement>('campo-agente').value.trim();
+    // Vacío (lo normal): se busca la dirección publicada por la Mac.
+    const agente = escrito ? normalizarAgente(escrito) : await consultarAgentePublicado(token);
+    if (!agente) throw new ErrorSinAgente('No encontrada');
+    await iniciar({ agente, token });
   } catch (e) {
     $('error-emparejar').textContent =
-      e instanceof ErrorNoAutorizado ? 'Token incorrecto.' : 'No se pudo conectar. ¿Está corriendo el agente y el túnel?';
+      e instanceof ErrorNoAutorizado
+        ? 'Token incorrecto.'
+        : e instanceof ErrorSinAgente
+          ? 'No encontré la Mac. ¿Está encendida, con sesión iniciada y con internet? Revisa también el token.'
+          : 'No se pudo conectar con la Mac. Deja vacía la dirección para que la busque sola.';
   } finally {
     boton.disabled = false;
   }
@@ -1035,6 +1042,8 @@ async function arrancar() {
   if (desdeHash) history.replaceState(null, '', location.pathname); // el token no se queda en la barra ni en el historial
   const guardado = desdeHash ?? cargarEmparejamiento();
   if (!guardado) return mostrarEmparejar();
+  // Solo con el token: la dirección de la Mac se descubre de la publicada (cifrada).
+  if (!guardado.agente) guardado.agente = (await consultarAgentePublicado(guardado.token)) ?? '';
   try {
     await iniciar(guardado);
   } catch (e) {

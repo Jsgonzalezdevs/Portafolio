@@ -133,7 +133,7 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
   }
   const publicar = (crudo as { publicar?: unknown } | null)?.publicar as Config['publicar'];
   if (publicar !== undefined) {
-    if (typeof publicar?.remoto !== 'string' || !/^https:\/\//.test(publicar.remoto)) {
+    if (typeof publicar?.remoto !== 'string' || !publicar.remoto.startsWith('https://')) {
       throw new Error('config: "publicar.remoto" debe ser una URL https de git');
     }
     if (typeof publicar.rama !== 'string' || !/^[a-z0-9-]+$/.test(publicar.rama) || publicar.rama === 'main') {
