@@ -196,6 +196,7 @@ export function crearServidor({
           acciones: Object.entries(acciones).map(([id, a]) => ({ id, descripcion: a.descripcion })),
           escenas: config.escenas.map(({ id, nombre }) => ({ id, nombre })),
           apps: config.apps.map(({ id, nombre }) => ({ id, nombre })),
+          playlistsRapidas: config.playlistsRapidas ?? [],
           chat: Boolean(asistente),
           agenda: Boolean(agenda),
         });
@@ -401,7 +402,7 @@ export function crearServidor({
         return;
       }
 
-      const accion = /^\/acciones\/([a-z.]+)$/.exec(url.pathname);
+      const accion = /^\/acciones\/([a-z._-]+)$/.exec(url.pathname);
       if (req.method === 'POST' && accion) {
         const id = accion[1];
         const def = acciones[id];

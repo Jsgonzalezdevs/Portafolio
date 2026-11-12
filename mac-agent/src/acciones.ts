@@ -84,6 +84,43 @@ export function crearAcciones(config: Pick<Config, 'escenas' | 'apps'>, run: Eje
     'media.playpause': media('playpause', 'Reproducir/pausar'),
     'media.siguiente': media('next track', 'Siguiente canción'),
     'media.anterior': media('previous track', 'Canción anterior'),
+    'media.posicion': {
+      descripcion: 'Fija la posición de reproducción en segundos',
+      ejecutar: async (p) => {
+        const posicionSeg = entero(p, 'posicionSeg', 0, 86400);
+        const app = (await osa(`
+if application "Spotify" is running then
+  tell application "Spotify" to set player position to ${posicionSeg}
+  return "Spotify"
+else if application "Music" is running then
+  tell application "Music" to set player position to ${posicionSeg}
+  return "Música"
+else
+  return ""
+end if`)).trim();
+        if (!app) throw new ErrorDeAccion('No hay Spotify ni Música abiertos', 409);
+        return `Posición a ${posicionSeg}s en ${app}`;
+      },
+    },
+    'media.reproducir_uri': {
+      descripcion: 'Reproduce una playlist, álbum o pista en Spotify',
+      ejecutar: async (p) => {
+        const uri = typeof p.uri === 'string' ? p.uri.trim() : '';
+        if (!uri || !/^spotify:[a-zA-Z0-9:_-]+$/.test(uri)) {
+          throw new ErrorDeAccion('"uri" debe ser un URI válido de Spotify (ej. spotify:playlist:...)');
+        }
+        const limpia = uri.replace(/"/g, '');
+        await osa(`
+tell application "Spotify"
+  if "${limpia}" contains ":playlist:" or "${limpia}" contains ":album:" or "${limpia}" contains ":artist:" then
+    play track "" in context "${limpia}"
+  else
+    play track "${limpia}"
+  end if
+end tell`);
+        return 'Reproduciendo en Spotify';
+      },
+    },
     'pantalla.apagar': {
       descripcion: 'Apaga la pantalla (y bloquea si la Mac pide contraseña al despertar)',
       ejecutar: async () => {

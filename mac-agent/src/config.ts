@@ -37,6 +37,13 @@ export interface AppPermitida {
   app: string;
 }
 
+export interface PlaylistRapida {
+  id: string;
+  nombre: string;
+  uri: string;
+  icono: string;
+}
+
 export interface Config {
   puerto: number;
   /**
@@ -48,6 +55,7 @@ export interface Config {
   origenes: string[];
   escenas: Escena[];
   apps: AppPermitida[];
+  playlistsRapidas?: PlaylistRapida[];
   asistente: ConfigAsistente;
   /**
    * Dónde publicar la dirección del túnel (cifrada con el token) para que el
@@ -72,6 +80,13 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
     { id: 'cine', nombre: 'Modo Cine', atajo: 'Modo Cine' },
   ],
   apps: [],
+  playlistsRapidas: [
+    { id: 'enfoque', nombre: 'Enfoque', uri: 'spotify:playlist:37i9dQZF1DXdLEN7aqioXM', icono: '🎯' },
+    { id: 'exitos', nombre: 'Éxitos', uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M', icono: '🔥' },
+    { id: 'chill', nombre: 'Chill', uri: 'spotify:playlist:37i9dQZF1DX4WYpdgoIcn6', icono: '☕' },
+    { id: 'gym', nombre: 'Gym', uri: 'spotify:playlist:37i9dQZF1DX76Wlfdnj7AP', icono: '⚡' },
+    { id: 'lofi', nombre: 'Lo-Fi', uri: 'spotify:playlist:37i9dQZF1DXd9rSDyQguIk', icono: '🎧' },
+  ],
   asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
 };
 
@@ -130,7 +145,16 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
     ((crudo as Record<string, unknown>).ciudad as string).trim()
       ? ((crudo as Record<string, unknown>).ciudad as string).trim()
       : 'Ibague';
-  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, asistente, publicar, ciudad };
+  const playlistsRapidas = Array.isArray(c.playlistsRapidas)
+    ? c.playlistsRapidas.filter(
+        (p) =>
+          typeof p?.id === 'string' &&
+          typeof p?.nombre === 'string' &&
+          typeof p?.uri === 'string' &&
+          typeof p?.icono === 'string',
+      )
+    : PREDETERMINADA.playlistsRapidas;
+  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, playlistsRapidas, asistente, publicar, ciudad };
 }
 
 /** Token del dispositivo: AGENT_TOKEN si existe; si no, uno generado y guardado en .token (permisos 600). */

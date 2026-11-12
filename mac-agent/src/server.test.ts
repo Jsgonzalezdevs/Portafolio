@@ -84,6 +84,17 @@ test('acciones validan parámetros y nunca pasan por shell', async () => {
 
   const media = await post('/acciones/media.playpause', {});
   assert.equal(((await media.json()) as { mensaje: string }).mensaje, 'Reproducir/pausar en Spotify');
+
+  const pos = await post('/acciones/media.posicion', { posicionSeg: 45 });
+  assert.equal(pos.status, 200);
+  assert.equal(((await pos.json()) as { mensaje: string }).mensaje, 'Posición a 45s en Spotify');
+
+  const playUri = await post('/acciones/media.reproducir_uri', { uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M' });
+  assert.equal(playUri.status, 200);
+  assert.equal(((await playUri.json()) as { mensaje: string }).mensaje, 'Reproduciendo en Spotify');
+
+  const cat = (await (await fetch(`${base}/catalogo`, { headers: auth })).json()) as { playlistsRapidas: unknown[] };
+  assert.ok(Array.isArray(cat.playlistsRapidas));
 });
 
 test('JSON inválido → 400', async () => {

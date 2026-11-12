@@ -44,3 +44,10 @@ export function formatoTiempoTimer(segundosTotal: number): string {
   const segRestantes = s % 60;
   return `${String(m).padStart(2, '0')}:${String(segRestantes).padStart(2, '0')}`;
 }
+
+export function formatoTiempoPista(segundosTotal: number): string {
+  const s = Math.max(0, Math.floor(segundosTotal));
+  const m = Math.floor(s / 60);
+  const segRestantes = s % 60;
+  return `${m}:${String(segRestantes).padStart(2, '0')}`;
+}

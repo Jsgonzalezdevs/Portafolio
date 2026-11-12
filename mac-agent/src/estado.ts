@@ -18,7 +18,11 @@ export interface Reproductor {
   estado: 'playing' | 'paused' | 'stopped';
   cancion: string;
   artista: string;
+  album?: string | null;
   caratula: string | null;
+  posicionSeg: number;
+  duracionSeg: number;
+  dispositivoSalida?: string | null;
 }
 
 export interface Clima {
@@ -40,6 +44,7 @@ export interface EstadoMac {
   bateria: Bateria | null;
   volumen: Volumen | null;
   reproductor?: Reproductor | null;
+  dispositivoSalida?: string | null;
   clima?: Clima | null;
   momento: string;
 }
@@ -79,6 +84,12 @@ export function parsearVolumen(salida: string): Volumen | null {
   return { nivel: Number(nivel[1]), silenciado: mudo?.[1] === 'true' };
 }
 
+function parsearSegundos(val?: string): number {
+  if (!val) return 0;
+  const num = Number(val.trim().replace(',', '.'));
+  return Number.isFinite(num) && num > 0 ? Math.round(num) : 0;
+}
+
 /** `osascript` con Spotify / Música → Reproductor o null si nada suena. */
 export function parsearReproductor(salida: string): Reproductor | null {
   const limpia = salida.trim();
@@ -93,8 +104,25 @@ export function parsearReproductor(salida: string): Reproductor | null {
   const cancion = partes[2].trim();
   const artista = partes[3].trim();
   const caratula = partes[4]?.trim() || null;
+  const posicionSeg = parsearSegundos(partes[5]);
+  const duracionSeg = parsearSegundos(partes[6]);
+  const album = partes[7]?.trim() || null;
   if (!cancion) return null;
-  return { app, estado, cancion, artista, caratula };
+  return { app, estado, cancion, artista, caratula, posicionSeg, duracionSeg, album };
+}
+
+/** `system_profiler SPAudioDataType -json` → Nombre del dispositivo de salida activo o null. */
+export function parsearDispositivoSalida(salida: string): string | null {
+  try {
+    const datos = JSON.parse(salida) as {
+      SPAudioDataType?: { _items?: { _name?: string; coreaudio_default_audio_output_device?: string; coreaudio_output_source?: string }[] }[];
+    };
+    const items = datos?.SPAudioDataType?.[0]?._items ?? [];
+    const activo = items.find((it) => it.coreaudio_default_audio_output_device === 'spaudio_yes');
+    return activo?.coreaudio_output_source || activo?._name || null;
+  } catch {
+    return null;
+  }
 }
 
 /** `wttr.in/?format=%c|%t|%C|%l&lang=es` → Clima o null. */
@@ -143,11 +171,23 @@ if application "Spotify" is running then
     if estado is not "stopped" then
       set trackName to name of current track
       set artistName to artist of current track
+      set albumName to ""
+      try
+        set albumName to album of current track
+      end try
       set albumArt to ""
       try
         set albumArt to artwork url of current track
       end try
-      return "spotify" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & albumArt
+      set posSec to 0
+      try
+        set posSec to player position
+      end try
+      set durSec to 0
+      try
+        set durSec to (duration of current track) / 1000
+      end try
+      return "spotify" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & albumArt & character id 9 & posSec & character id 9 & durSec & character id 9 & albumName
     end if
   end tell
 else if application "Music" is running then
@@ -156,7 +196,19 @@ else if application "Music" is running then
     if estado is not "stopped" then
       set trackName to name of current track
       set artistName to artist of current track
-      return "music" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & ""
+      set albumName to ""
+      try
+        set albumName to album of current track
+      end try
+      set posSec to 0
+      try
+        set posSec to player position
+      end try
+      set durSec to 0
+      try
+        set durSec to duration of current track
+      end try
+      return "music" & character id 9 & estado & character id 9 & trackName & character id 9 & artistName & character id 9 & "" & character id 9 & posSec & character id 9 & durSec & character id 9 & albumName
     end if
   end tell
 end if
@@ -172,6 +224,7 @@ export class Monitor {
   private sistema = '';
   private bateria: { valor: Bateria | null; en: number } = { valor: null, en: 0 };
   private reproductor: { valor: Reproductor | null; en: number } = { valor: null, en: 0 };
+  private salidaAudio: { valor: string | null; en: number } = { valor: null, en: 0 };
   private clima: { valor: Clima | null; en: number } = { valor: null, en: 0 };
   private fondo: { valor: string | null; en: number } = { valor: null, en: 0 };
   private readonly ejecutar: Ejecutor;
@@ -249,6 +302,19 @@ export class Monitor {
     return this.fondo.valor;
   }
 
+  async leerDispositivoSalida(): Promise<string | null> {
+    if (Date.now() - this.salidaAudio.en > 20_000) {
+      this.salidaAudio = {
+        valor: await this.intentar(async () => {
+          const salida = await this.ejecutar('system_profiler', ['SPAudioDataType', '-json']);
+          return parsearDispositivoSalida(salida);
+        }, this.salidaAudio.valor),
+        en: Date.now(),
+      };
+    }
+    return this.salidaAudio.valor;
+  }
+
   async leer(): Promise<EstadoMac> {
     if (!this.sistema) {
       this.sistema = await this.intentar(
@@ -287,13 +353,15 @@ export class Monitor {
         en: Date.now(),
       };
     }
-    const [memUsada, volumen] = await Promise.all([
+    const [dispositivoSalida, memUsada, volumen] = await Promise.all([
+      this.leerDispositivoSalida(),
       this.intentar(async () => parsearVmStat(await this.ejecutar('vm_stat', [])), null),
       this.intentar(
         async () => parsearVolumen(await this.ejecutar('osascript', ['-e', 'get volume settings'])),
         null,
       ),
     ]);
+    const rep = this.reproductor.valor ? { ...this.reproductor.valor, dispositivoSalida } : null;
     const total = os.totalmem();
     return {
       nombre: os.hostname().replace(/\.local$/, ''),
@@ -306,7 +374,8 @@ export class Monitor {
       disco: leerDisco(),
       bateria: this.bateria.valor,
       volumen,
-      reproductor: this.reproductor.valor,
+      reproductor: rep,
+      dispositivoSalida,
       clima: this.clima.valor,
       momento: new Date().toISOString(),
     };

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parsearClima, parsearPmset, parsearReproductor, parsearVmStat, parsearVolumen } from './estado.ts';
+import { parsearClima, parsearDispositivoSalida, parsearPmset, parsearReproductor, parsearVmStat, parsearVolumen } from './estado.ts';
 
 test('vm_stat: suma apps (sin purgable) + fija + comprimida', () => {
   const salida = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
@@ -37,15 +37,18 @@ test('volumen', () => {
   assert.equal(parsearVolumen('missing value'), null);
 });
 
-test('reproductor: spotify y música con estado, título, artista y carátula', () => {
+test('reproductor: spotify y música con estado, título, artista, carátula, posición y álbum', () => {
   assert.deepEqual(
-    parsearReproductor('spotify\tplaying\tSong Name\tArtist Name\thttps://i.scdn.co/art.jpg'),
+    parsearReproductor('spotify\tplaying\tSong Name\tArtist Name\thttps://i.scdn.co/art.jpg\t36,5\t286,01\tAlbum Name'),
     {
       app: 'spotify',
       estado: 'playing',
       cancion: 'Song Name',
       artista: 'Artist Name',
       caratula: 'https://i.scdn.co/art.jpg',
+      posicionSeg: 37,
+      duracionSeg: 286,
+      album: 'Album Name',
     },
   );
   assert.deepEqual(
@@ -56,10 +59,36 @@ test('reproductor: spotify y música con estado, título, artista y carátula', 
       cancion: 'Otra Canción',
       artista: 'Otro Artista',
       caratula: null,
+      posicionSeg: 0,
+      duracionSeg: 0,
+      album: null,
     },
   );
   assert.equal(parsearReproductor('none'), null);
   assert.equal(parsearReproductor(''), null);
+});
+
+test('dispositivoSalida: extrae el dispositivo de salida activo de SPAudioDataType', () => {
+  const mockJson = JSON.stringify({
+    SPAudioDataType: [
+      {
+        _items: [
+          {
+            _name: 'Micrófono de MacBook Air',
+            coreaudio_default_audio_input_device: 'spaudio_yes',
+          },
+          {
+            _name: 'Bocinas de MacBook Air',
+            coreaudio_default_audio_output_device: 'spaudio_yes',
+            coreaudio_output_source: 'Bocinas de MacBook Air',
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(parsearDispositivoSalida(mockJson), 'Bocinas de MacBook Air');
+  assert.equal(parsearDispositivoSalida('{}'), null);
+  assert.equal(parsearDispositivoSalida('invalid json'), null);
 });
 
 test('clima: parsea formato wttr.in en español', () => {

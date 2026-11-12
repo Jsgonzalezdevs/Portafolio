@@ -504,6 +504,123 @@ code { background: rgba(255, 255, 255, 0.08); padding: 2px 6px; border-radius: 6
   text-overflow: ellipsis;
 }
 
+.media-cabecera-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.badge-dispositivo {
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+}
+.media-album {
+  font-size: 11px;
+  margin: 1px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.65;
+}
+
+/* Barra de progreso de medios */
+.media-progreso-caja {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+  padding: 0 4px;
+}
+.media-tiempo {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tenue);
+  min-width: 32px;
+}
+#media-tiempo-actual {
+  text-align: right;
+}
+#media-tiempo-total {
+  text-align: left;
+}
+.media-progreso-barra-caja {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.media-progreso-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  margin: 0;
+  cursor: pointer;
+}
+.media-progreso-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+/* Playlists rápidas */
+.media-playlists-seccion {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borde);
+}
+.media-playlists-titulo {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.media-playlists-fila {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.media-playlists-fila::-webkit-scrollbar {
+  display: none;
+}
+.chip-playlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--borde);
+  border-radius: 9999px;
+  color: var(--texto);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.chip-playlist:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+.chip-playlist__icono {
+  font-size: 13px;
+}
+
 .fila { display: flex; flex-wrap: wrap; gap: 10px; }
 .rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
 .rejilla .boton { width: 100%; }

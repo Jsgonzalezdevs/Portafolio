@@ -13,14 +13,25 @@ import {
 } from './conexion';
 import { iniciarAgenda, type Aviso } from './agenda';
 import { iniciarChat, puenteNativo } from './chat';
-import { bytes, duracion, esDeNoche, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
+import { bytes, duracion, esDeNoche, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
+
+export interface PlaylistRapida {
+  id: string;
+  nombre: string;
+  uri: string;
+  icono: string;
+}
 
 interface Reproductor {
   app: 'spotify' | 'music';
   estado: 'playing' | 'paused' | 'stopped';
   cancion: string;
   artista: string;
+  album?: string | null;
   caratula: string | null;
+  posicionSeg?: number;
+  duracionSeg?: number;
+  dispositivoSalida?: string | null;
 }
 
 interface Clima {
@@ -43,6 +54,7 @@ interface EstadoMac {
   bateria: { porcentaje: number; cargando: boolean; conectada: boolean } | null;
   volumen: { nivel: number; silenciado: boolean } | null;
   reproductor?: Reproductor | null;
+  dispositivoSalida?: string | null;
   clima?: Clima | null;
   /** Recordatorios que acaban de vencer. */
   avisos?: Aviso[];
@@ -53,6 +65,7 @@ interface Catalogo {
   agenda?: boolean;
   escenas: { id: string; nombre: string }[];
   apps: { id: string; nombre: string }[];
+  playlistsRapidas?: PlaylistRapida[];
 }
 
 export interface Alarma {
@@ -81,6 +94,32 @@ let tocandoVolumen = false;
 let ultimoEstadoMac: EstadoMac | null = null;
 let ultimoResumen: ResumenMac | null = null;
 let alarmasCache: Alarma[] = [];
+let tocandoProgreso = false;
+let posicionLocalSeg = 0;
+let duracionLocalSeg = 0;
+let temporizadorProgreso: number | undefined;
+
+function iniciarTemporizadorProgreso() {
+  if (temporizadorProgreso !== undefined) return;
+  temporizadorProgreso = window.setInterval(() => {
+    if (duracionLocalSeg > 0 && posicionLocalSeg < duracionLocalSeg) {
+      posicionLocalSeg += 1;
+      if (!tocandoProgreso) {
+        const slider = $<HTMLInputElement>('media-progreso');
+        if (slider) slider.value = String(posicionLocalSeg);
+        const actualEl = $('media-tiempo-actual');
+        if (actualEl) actualEl.textContent = formatoTiempoPista(posicionLocalSeg);
+      }
+    }
+  }, 1000);
+}
+
+function detenerTemporizadorProgreso() {
+  if (temporizadorProgreso !== undefined) {
+    clearInterval(temporizadorProgreso);
+    temporizadorProgreso = undefined;
+  }
+}
 
 // ---------- Fondo dinámico ----------
 let temporizadorFondo: number | undefined;
@@ -543,7 +582,21 @@ function pintarEstado(e: EstadoMac) {
   const activo = $('media-activo');
   const reposo = $('media-reposo');
   const badge = $('media-badge');
+  const badgeDisp = $('media-dispositivo');
+  const progresoCaja = $('media-progreso-caja');
   const iconoPlayPause = $('icono-playpause');
+  const albumEl = $('media-album');
+
+  const salidaAudio = rep?.dispositivoSalida || e.dispositivoSalida;
+  if (salidaAudio) {
+    badgeDisp.hidden = false;
+    const esAuricular = /airpod|auricular|headphone|aud[ií]fono/i.test(salidaAudio);
+    badgeDisp.textContent = `${esAuricular ? '🎧' : '🔊'} ${salidaAudio}`;
+    badgeDisp.title = `Dispositivo de salida: ${salidaAudio}`;
+  } else {
+    badgeDisp.hidden = true;
+  }
+
   if (rep && (rep.estado === 'playing' || rep.estado === 'paused')) {
     activo.hidden = false;
     reposo.hidden = true;
@@ -551,6 +604,14 @@ function pintarEstado(e: EstadoMac) {
     badge.textContent = rep.app === 'spotify' ? 'Spotify' : 'Música';
     $('media-titulo').textContent = rep.cancion;
     $('media-artista').textContent = rep.artista;
+
+    if (rep.album) {
+      albumEl.hidden = false;
+      albumEl.textContent = rep.album;
+    } else {
+      albumEl.hidden = true;
+    }
+
     const caratula = $<HTMLImageElement>('media-caratula');
     if (rep.caratula) {
       if (caratula.src !== rep.caratula) caratula.src = rep.caratula;
@@ -563,10 +624,35 @@ function pintarEstado(e: EstadoMac) {
         ? '<path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'
         : '<path fill="currentColor" d="M8 5v14l11-7z"/>';
     $('boton-playpause').setAttribute('aria-label', rep.estado === 'playing' ? 'Pausar' : 'Reproducir');
+
+    // Progreso y duración
+    duracionLocalSeg = rep.duracionSeg ?? 0;
+    if (duracionLocalSeg > 0) {
+      progresoCaja.hidden = false;
+      const slider = $<HTMLInputElement>('media-progreso');
+      slider.max = String(duracionLocalSeg);
+      if (!tocandoProgreso) {
+        posicionLocalSeg = rep.posicionSeg ?? 0;
+        slider.value = String(posicionLocalSeg);
+        $('media-tiempo-actual').textContent = formatoTiempoPista(posicionLocalSeg);
+      }
+      $('media-tiempo-total').textContent = formatoTiempoPista(duracionLocalSeg);
+    } else {
+      progresoCaja.hidden = true;
+    }
+
+    if (rep.estado === 'playing' && duracionLocalSeg > 0) {
+      iniciarTemporizadorProgreso();
+    } else {
+      detenerTemporizadorProgreso();
+    }
   } else {
     activo.hidden = true;
     reposo.hidden = false;
     badge.hidden = true;
+    albumEl.hidden = true;
+    progresoCaja.hidden = true;
+    detenerTemporizadorProgreso();
     iconoPlayPause.innerHTML = '<path fill="currentColor" d="M8 5v14l11-7z"/>';
     $('boton-playpause').setAttribute('aria-label', 'Reproducir o pausar');
   }
@@ -631,6 +717,45 @@ rango.addEventListener('change', async () => {
 $('boton-mute').addEventListener('click', () => {
   void accion('volumen.silenciar', { silenciar: !ultimoVolumen?.silenciado });
 });
+
+const sliderProgreso = $<HTMLInputElement>('media-progreso');
+if (sliderProgreso) {
+  sliderProgreso.addEventListener('input', () => {
+    tocandoProgreso = true;
+    posicionLocalSeg = Number(sliderProgreso.value);
+    $('media-tiempo-actual').textContent = formatoTiempoPista(posicionLocalSeg);
+  });
+  sliderProgreso.addEventListener('change', async () => {
+    const seg = Math.round(Number(sliderProgreso.value));
+    posicionLocalSeg = seg;
+    tocandoProgreso = false;
+    await accion('media.posicion', { posicionSeg: seg });
+  });
+}
+
+function pintarPlaylistsRapidas(items: PlaylistRapida[]) {
+  const seccion = $('media-playlists-seccion');
+  const fila = $('media-playlists');
+  if (!seccion || !fila) return;
+  if (!items.length) {
+    seccion.hidden = true;
+    fila.textContent = '';
+    return;
+  }
+  fila.textContent = '';
+  for (const p of items) {
+    const btn = document.createElement('button');
+    btn.className = 'chip-playlist';
+    btn.type = 'button';
+    btn.setAttribute('data-uri', p.uri);
+    btn.innerHTML = `<span class="chip-playlist__icono">${p.icono}</span><span>${p.nombre}</span>`;
+    btn.addEventListener('click', () => {
+      void accion('media.reproducir_uri', { uri: p.uri }, btn);
+    });
+    fila.appendChild(btn);
+  }
+  seccion.hidden = false;
+}
 
 // ---------- Escenas e Íconos ----------
 const ICONOS_ESCENAS: Record<string, string> = {
@@ -705,6 +830,7 @@ async function iniciar(e: Emparejamiento) {
   guardarEmparejamiento(e);
   pintarBotones('escenas', 'escena.ejecutar', catalogo.escenas);
   pintarBotones('apps', 'app.abrir', catalogo.apps);
+  pintarPlaylistsRapidas(catalogo.playlistsRapidas ?? []);
   $('tarjeta-chat').hidden = !catalogo.chat;
   agendaUI.activar(Boolean(catalogo.agenda));
   $('pantalla-panel').classList.toggle('panel--sin-chat', !catalogo.chat);

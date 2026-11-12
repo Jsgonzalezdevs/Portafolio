@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatoTiempoTimer, saludoSegunHora } from './formato';
+import { formatoTiempoPista, formatoTiempoTimer, saludoSegunHora } from './formato';
 
 describe('formato del nuevo dashboard', () => {
   it('saludoSegunHora devuelve saludo y periodo adecuados', () => {
@@ -42,5 +42,13 @@ describe('formato del nuevo dashboard', () => {
     expect(formatoTiempoTimer(65)).toBe('01:05');
     expect(formatoTiempoTimer(300)).toBe('05:00');
     expect(formatoTiempoTimer(900)).toBe('15:00');
+  });
+
+  it('formatoTiempoPista formatea segundos a M:SS para reproductores', () => {
+    expect(formatoTiempoPista(0)).toBe('0:00');
+    expect(formatoTiempoPista(5)).toBe('0:05');
+    expect(formatoTiempoPista(65)).toBe('1:05');
+    expect(formatoTiempoPista(225)).toBe('3:45');
+    expect(formatoTiempoPista(3600)).toBe('60:00');
   });
 });
