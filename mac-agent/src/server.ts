@@ -199,6 +199,8 @@ export function crearServidor({
           apps: config.apps.map(({ id, nombre }) => ({ id, nombre })),
           playlistsRapidas: config.playlistsRapidas ?? [],
           rutinas: rutinas?.listar() ?? [],
+          // Para que la tablet salude y haga las rutinas por su cuenta cuando la Mac no responde.
+          nombre: config.asistente.nombre ?? '',
           chat: Boolean(asistente),
           agenda: Boolean(agenda),
         });
@@ -355,7 +357,7 @@ export function crearServidor({
           }
           const dias = Array.isArray(cuerpo.dias) ? (cuerpo.dias as number[]) : undefined;
           try {
-            const alarma = gestorAlarmas.crear(cuerpo.hora, cuerpo.titulo, dias);
+            const alarma = gestorAlarmas.crear(cuerpo.hora, cuerpo.titulo, dias, typeof cuerpo.id === 'string' ? cuerpo.id : undefined);
             revisarAlarmas();
             if (suscriptores.size) void muestrear();
             return json(res, 200, { alarma });

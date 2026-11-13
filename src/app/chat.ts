@@ -1,4 +1,4 @@
-import { ErrorNoAutorizado, llamar, type Emparejamiento } from './conexion';
+import { ErrorNoAutorizado, ErrorSinAgente, llamar, type Emparejamiento } from './conexion';
 
 /**
  * Chat con el asistente (POST /chat del mac-agent).
@@ -22,6 +22,11 @@ interface Opciones {
   alAcciones?: (acciones: RespuestaChat['acciones']) => void;
   /** Lo que le toca hacer al panel tras una rutina de voz (p. ej. «modo-noche»). */
   alEfectos?: (efectos: unknown) => void;
+  /**
+   * La Mac no respondió. Si el texto se puede resolver en la tablet (una rutina), lo hace y devuelve lo
+   * que dijo; si no, null y se avisa de que la Mac no contesta.
+   */
+  alSinMac?: (texto: string) => string | null;
 }
 
 /** Puente que expone la app Android (android/) dentro de su WebView. */
@@ -61,7 +66,7 @@ type Reconocimiento = {
   stop: () => void;
 };
 
-export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos }: Opciones) {
+export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos, alSinMac }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const historial = $('chat-historial');
   const campo = $('chat-texto') as HTMLInputElement;
@@ -133,7 +138,15 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
         pensando.textContent = 'El token ya no es válido.';
         alNoAutorizado();
       } else {
-        pensando.textContent = err instanceof TypeError ? 'No pude contactar a la Mac.' : (err as Error).message;
+        const sinMac = err instanceof TypeError || err instanceof ErrorSinAgente;
+        const local = sinMac ? alSinMac?.(limpio) : null;
+        if (local) {
+          // La tablet lo resolvió sola (y ya lo leyó en voz alta).
+          pensando.className = 'chat__ia';
+          pensando.textContent = local;
+          return;
+        }
+        pensando.textContent = sinMac ? 'No pude contactar a la Mac.' : (err as Error).message;
       }
       if (porVoz) hablar(pensando.textContent ?? 'Algo falló.');
     } finally {

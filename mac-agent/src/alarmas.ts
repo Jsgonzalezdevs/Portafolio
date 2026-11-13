@@ -35,7 +35,14 @@ export class GestorAlarmas {
     }
   }
 
-  crear(hora: string, titulo: string, dias?: number[]): Alarma {
+  /**
+   * `id` lo pone la tablet cuando la alarma nace allí: así la Mac y la tablet hablan de la misma alarma
+   * y crearla dos veces (por un reintento) no la duplica.
+   */
+  crear(hora: string, titulo: string, dias?: number[], id?: string): Alarma {
+    if (id !== undefined && !/^[a-zA-Z0-9-]{8,64}$/.test(id)) throw new Error('Identificador de alarma inválido');
+    const existente = id ? this.listar().find((a) => a.id === id) : undefined;
+    if (existente) return existente;
     if (!REGEX_HORA.test(hora)) {
       throw new Error('Hora inválida: debe tener formato HH:MM (24h)');
     }
@@ -50,7 +57,7 @@ export class GestorAlarmas {
     }
 
     const nuevaAlarma: Alarma = {
-      id: randomUUID(),
+      id: id ?? randomUUID(),
       hora,
       dias: diasValidos,
       titulo: tituloLimpio,

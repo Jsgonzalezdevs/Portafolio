@@ -199,7 +199,8 @@ test('próxima alarma: respeta los días y salta lo ya pasado', () => {
   assert.equal(p.getDate(), 13); // viernes 13: 05:00 de mañana gana a las 07:30 del viernes
   assert.equal(p.getHours(), 5);
   assert.equal(proximaAlarma([], AHORA), null);
-  assert.equal(proximaAlarma([{ id: '4', hora: '09:00', dias: [], titulo: 'x', activa: true }], AHORA)!.getDate(), 12);
+  const hoy9: Alarma[] = [{ id: '4', hora: '09:00', dias: [], titulo: 'x', activa: true }];
+  assert.equal(proximaAlarma(hoy9, AHORA)!.getDate(), 12);
 });
 
 test('config: personalizar una rutina de fábrica, crear una nueva y rechazar lo inválido', () => {

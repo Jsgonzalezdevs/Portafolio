@@ -140,6 +140,26 @@ que falla no frena los demás. Una escena que requiere confirmación nunca corre
 |---|---|---|
 | POST | `/rutinas/:id` | Ejecuta la rutina → `{ texto, pasos, efectos }` |
 
+## La tablet sin la Mac
+
+La Mac se duerme o se apaga; la tablet no debe quedar inútil. Lo que hace sola, sin que la Mac responda:
+
+- **Alarmas y temporizador**: las guarda y las hace sonar la propia tablet. La Mac solo guarda una copia
+  (para que la voz las cuente y las cree). Cuando se hablan, se reconcilian y manda la tablet; borrar una
+  alarma aquí no la resucita desde la copia de la Mac.
+- **Clima**: lo pide directo a Open-Meteo (gratis, sin clave) por el nombre de la ciudad.
+- **Agenda y recordatorios**: muestra lo último que supo, con su antigüedad («hace 3 h»), y avisa de los
+  recordatorios con hora que vencen aunque la Mac no avise.
+- **Fondo de pantalla, botones y rutinas**: quedan guardados en la tablet. Las tarjetas que solo la Mac
+  puede atender (música, apps, estado, accesos) se ven atenuadas y la barra dice «Mac sin conexión · hace X».
+- **«Buenos días» / «buenas noches»** (botón o escrito en el chat): con la Mac fuera, la tablet hace lo suyo
+  (modo noche) y lee el resumen con lo guardado, con los mismos textos que arma la Mac (`src/hablar.ts`,
+  compartido por los dos lados). Para ello `/catalogo` incluye las frases de cada rutina.
+
+Lo que sigue necesitando la Mac: la conversación con la IA, controlar la Mac y crear eventos/recordatorios.
+Un navegador no deja sonar nada hasta que alguien toca la pantalla una vez: por eso aparece un aviso
+«Toca la pantalla una vez para que las alarmas suenen» tras recargar (la app Android no lo necesita).
+
 ## Agenda: Calendario y Recordatorios
 
 El agente usa el **Calendario y los Recordatorios de macOS** (EventKit) a

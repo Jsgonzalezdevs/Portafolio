@@ -270,7 +270,7 @@ test('rutinas: «buenas noches» se resuelve sin llamar a la IA y devuelve el ef
     leerEstado: async () => ({}) as EstadoMac,
     crearMensaje: g.crear,
     rutinas: {
-      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙', efectos: ['modo-noche' as const] }],
       porFrase: (t) => (/buenas noches/i.test(t) ? ({ id: 'buenas-noches' } as never) : null),
       ejecutar: async (id) => {
         ejecutadas.push(id);
@@ -306,7 +306,7 @@ test('rutinas: si la frase no es exacta, la IA usa la herramienta ejecutar_rutin
     leerEstado: async () => ({}) as EstadoMac,
     crearMensaje: g.crear,
     rutinas: {
-      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙', efectos: ['modo-noche' as const] }],
       porFrase: () => null,
       ejecutar: async (id) => ({ id, nombre: 'Buenas noches', texto: 'Buenas noches, Julian. Que descanses.', pasos: [], efectos: ['modo-noche'] }),
     },

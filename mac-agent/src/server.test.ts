@@ -398,7 +398,7 @@ test('rutinas: el catálogo las lista, POST /rutinas/:id las ejecuta (con token)
     monitor: { leer: async () => estadoFalso },
     acciones: crearAcciones(config, async () => ''),
     rutinas: {
-      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙', efectos: ['modo-noche' as const], frases: ['buenas noches'] }],
       porFrase: () => null,
       ejecutar: async (id: string) => {
         if (id !== 'buenas-noches') throw new ErrorDeAccion('Rutina desconocida', 404);
@@ -412,7 +412,7 @@ test('rutinas: el catálogo las lista, POST /rutinas/:id las ejecuta (con token)
   const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
   try {
     const cat = (await (await fetch(`${b}/catalogo`, { headers: auth })).json()) as { rutinas: unknown[] };
-    assert.deepEqual(cat.rutinas, [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }]);
+    assert.deepEqual(cat.rutinas, [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙', efectos: ['modo-noche'], frases: ['buenas noches'] }]);
 
     assert.equal((await fetch(`${b}/rutinas/buenas-noches`, { method: 'POST' })).status, 401);
     const ok = await fetch(`${b}/rutinas/buenas-noches`, { method: 'POST', headers: auth });
@@ -434,6 +434,40 @@ test('rutinas: el catálogo las lista, POST /rutinas/:id las ejecuta (con token)
   } finally {
     sin.close();
   }
+});
+
+
+test('alarmas: la tablet puede ponerle su propio id (crear dos veces no duplica) y rechazar ids raros', async () => {
+  const carpeta = mkdtempSync(join(tmpdir(), 'alarmas-id-'));
+  const s = crearServidor({
+    config,
+    monitor: { leer: async () => estadoFalso },
+    acciones: crearAcciones(config, async () => ''),
+    gestorAlarmas: new GestorAlarmas(carpeta),
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  const crear = (cuerpo: unknown) => fetch(`${b}/alarmas`, { method: 'POST', headers: auth, body: JSON.stringify(cuerpo) });
+  try {
+    const id = '3f2b8c1e-aaaa-4bbb-8ccc-123456789abc';
+    const a = (await (await crear({ hora: '06:00', titulo: 'Despertar', id })).json()) as { alarma: { id: string } };
+    assert.equal(a.alarma.id, id);
+    await crear({ hora: '06:00', titulo: 'Despertar', id }); // reintento
+    const lista = (await (await fetch(`${b}/alarmas`, { headers: auth })).json()) as { alarmas: unknown[] };
+    assert.equal(lista.alarmas.length, 1, 'el reintento no duplica');
+    assert.equal((await crear({ hora: '07:00', titulo: 'x', id: '../etc' })).status, 400);
+    const sinId = (await (await crear({ hora: '08:00', titulo: 'y' })).json()) as { alarma: { id: string } };
+    assert.match(sinId.alarma.id, /^[0-9a-f-]{36}$/, 'sin id, la Mac sigue poniendo el suyo');
+  } finally {
+    s.close();
+    rmSync(carpeta, { recursive: true, force: true });
+  }
+});
+
+test('el catálogo trae el nombre para que la tablet salude sola', async () => {
+  const cat = (await (await fetch(`${base}/catalogo`, { headers: auth })).json()) as { nombre: string };
+  assert.equal(typeof cat.nombre, 'string');
 });
 
 // Va al final: deja 127.0.0.1 bloqueado un minuto para el resto del archivo.

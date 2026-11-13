@@ -1,20 +1,26 @@
+import { CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { ErrorNoAutorizado, llamar, type Emparejamiento } from './conexion';
 
-/** Tarjeta de agenda (GET /agenda) y avisos de recordatorios vencidos (llegan en el estado). */
+/**
+ * Tarjeta de agenda (GET /agenda) y avisos de recordatorios vencidos.
+ *
+ * Lo último que respondió la Mac queda guardado en la tablet: con la Mac apagada se sigue viendo la
+ * agenda («datos de hace 2 h») y los recordatorios con hora siguen avisando.
+ */
 
-interface Evento {
+export interface Evento {
   titulo: string;
   inicio: string;
   todoElDia: boolean;
 }
 
-interface Recordatorio {
+export interface Recordatorio {
   id: string;
   titulo: string;
   vence: string | null;
 }
 
-interface RespuestaAgenda {
+export interface RespuestaAgenda {
   permisos: { calendario: string; recordatorios: string };
   eventos: Evento[];
   recordatorios: Recordatorio[];
@@ -36,6 +42,46 @@ interface Opciones {
 }
 
 const formatoHora = new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+const CLAVE_DESCARTADOS = 'asistente.avisosDescartados';
+const CLAVE_PENDIENTES = 'asistente.completarPendientes';
+const VENTANA_AVISO_MS = 15 * 60_000;
+
+function leerJson<T>(clave: string, vacio: T): T {
+  try {
+    return (JSON.parse(localStorage.getItem(clave) ?? 'null') as T | null) ?? vacio;
+  } catch {
+    return vacio;
+  }
+}
+
+function guardarJson(clave: string, valor: unknown) {
+  try {
+    localStorage.setItem(clave, JSON.stringify(valor));
+  } catch {
+    /* sin almacenamiento */
+  }
+}
+
+/**
+ * Recordatorios con hora que acaban de vencer según lo guardado en la tablet. Sirven cuando la Mac no
+ * avisa (apagada) y no se repiten si ya se cerraron aquí. Exportado para tests.
+ */
+export function avisosVencidos(recordatorios: Recordatorio[], descartados: Record<string, number>, ahora: number): Aviso[] {
+  return recordatorios
+    .filter((r): r is Recordatorio & { vence: string } => !!r.vence && descartados[r.id] === undefined)
+    .filter((r) => {
+      const t = Date.parse(r.vence);
+      return Number.isFinite(t) && t <= ahora && t > ahora - VENTANA_AVISO_MS;
+    })
+    .map((r) => ({ id: r.id, titulo: r.titulo, vence: r.vence }));
+}
+
+/** Une los avisos de la Mac con los de la tablet sin repetir ninguno. */
+export function combinarAvisos(...listas: Aviso[][]): Aviso[] {
+  const vistos = new Set<string>();
+  return listas.flat().filter((a) => !vistos.has(a.id) && !!vistos.add(a.id));
+}
 
 function mismoDia(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -115,8 +161,18 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     contenedor.appendChild(caja);
   }
 
-  function pintar(r: RespuestaAgenda) {
+  /** «Sin conexión con la Mac · datos de hace 2 h», cuando lo que se ve viene de la memoria de la tablet. */
+  function notaDeCache(destino: HTMLElement, desde: number | null) {
+    if (desde === null) return;
+    const p = document.createElement('p');
+    p.className = 'nota-cache';
+    p.textContent = `Sin conexión con la Mac · datos de ${hace(desde)}`;
+    destino.appendChild(p);
+  }
+
+  function pintar(r: RespuestaAgenda, desde: number | null = null) {
     contenedor.textContent = '';
+    notaDeCache(contenedor, desde);
     const ahora = new Date();
     if (r.permisos.calendario !== 'concedido' || r.permisos.recordatorios !== 'concedido') pintarPermiso(r.permisos);
 
@@ -131,6 +187,7 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
       const permitido = r.permisos.recordatorios === 'concedido';
       tarjetaRecordatorios.hidden = !permitido;
       contenedorRecordatorios.textContent = '';
+      notaDeCache(contenedorRecordatorios, desde);
       if (cuentaRecordatorios) cuentaRecordatorios.textContent = String(r.recordatorios.length);
       if (permitido) {
         lista(
@@ -155,13 +212,38 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     clearTimeout(temporizador);
     const e = emparejamiento();
     if (!e || tarjeta.hidden) return;
+    let reintentoMs = 5 * 60_000;
     try {
-      pintar(await llamar<RespuestaAgenda>(e, '/agenda'));
+      const r = await llamar<RespuestaAgenda>(e, '/agenda');
+      guardarCache(CLAVES.agenda, r);
+      pintar(r);
+      void completarPendientes(e);
+      comprobarAvisos();
     } catch (err) {
       if (err instanceof ErrorNoAutorizado) return alNoAutorizado();
-      if (!contenedor.querySelector('ul')) contenedor.innerHTML = '<p class="tenue">No se pudo leer la agenda.</p>';
+      // La Mac no responde: se muestra lo último que se supo, y se reintenta pronto.
+      const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
+      if (guardado) pintar(guardado.valor, guardado.en);
+      else if (!contenedor.querySelector('ul')) contenedor.innerHTML = '<p class="tenue">No se pudo leer la agenda.</p>';
+      reintentoMs = 60_000;
     }
-    temporizador = window.setTimeout(cargar, 5 * 60_000);
+    temporizador = window.setTimeout(cargar, reintentoMs);
+  }
+
+  /** «Hecho» pulsado con la Mac apagada: se avisa a la Mac en cuanto responde. */
+  async function completarPendientes(e: Emparejamiento) {
+    const pendientes = leerJson<string[]>(CLAVE_PENDIENTES, []);
+    if (!pendientes.length) return;
+    const quedan: string[] = [];
+    for (const id of pendientes) {
+      try {
+        await llamar(e, `/avisos/${encodeURIComponent(id)}/descartar`, { completar: true });
+      } catch (err) {
+        if (err instanceof ErrorNoAutorizado) throw err;
+        quedan.push(id);
+      }
+    }
+    guardarJson(CLAVE_PENDIENTES, quedan);
   }
 
   // ---------- Avisos de recordatorios ----------
@@ -169,20 +251,41 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     const a = avisoActual;
     aviso.hidden = true;
     avisoActual = null;
+    if (!a) return;
+    // Pase lo que pase con la Mac, este aviso ya no vuelve a salir aquí.
+    const ahora = Date.now();
+    const descartados = Object.fromEntries(Object.entries(leerJson<Record<string, number>>(CLAVE_DESCARTADOS, {})).filter(([, t]) => ahora - t < 24 * 3600_000));
+    descartados[a.id] = ahora;
+    guardarJson(CLAVE_DESCARTADOS, descartados);
+    avisosMac = avisosMac.filter((x) => x.id !== a.id);
+
     const e = emparejamiento();
-    if (!a || !e) return;
+    if (!e) return;
     try {
       await llamar(e, `/avisos/${encodeURIComponent(a.id)}/descartar`, { completar });
-    } catch {
-      /* si falla, el aviso volverá en el siguiente estado */
+    } catch (err) {
+      if (err instanceof ErrorNoAutorizado) return alNoAutorizado();
+      // Sin la Mac no se puede marcar como hecho: queda pendiente para cuando responda.
+      if (completar) guardarJson(CLAVE_PENDIENTES, [...new Set([...leerJson<string[]>(CLAVE_PENDIENTES, []), a.id])]);
     }
     void cargar();
   }
   $('recordatorio-hecho').addEventListener('click', () => void cerrarAviso(true));
   $('recordatorio-ok').addEventListener('click', () => void cerrarAviso(false));
 
+  /** Avisos que manda la Mac (en el estado). */
+  let avisosMac: Aviso[] = [];
+
   function mostrarAvisos(avisos: Aviso[] | undefined) {
-    const siguiente = avisos?.[0];
+    avisosMac = avisos ?? [];
+    comprobarAvisos();
+  }
+
+  /** Mezcla los avisos de la Mac con los que la tablet detecta sola; se llama también cada minuto. */
+  function comprobarAvisos() {
+    const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
+    const propios = guardado ? avisosVencidos(guardado.valor.recordatorios, leerJson<Record<string, number>>(CLAVE_DESCARTADOS, {}), Date.now()) : [];
+    const siguiente = combinarAvisos(avisosMac, propios)[0];
     if (!siguiente) {
       aviso.hidden = true;
       avisoActual = null;
@@ -206,5 +309,6 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     },
     recargar: () => void cargar(),
     mostrarAvisos,
+    comprobarAvisos,
   };
 }

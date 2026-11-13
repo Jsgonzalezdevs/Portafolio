@@ -12,7 +12,22 @@ import {
   type Emparejamiento,
   type EstadoConexion,
 } from './conexion';
-import { iniciarAgenda, type Aviso } from './agenda';
+import { iniciarAgenda, type Aviso, type RespuestaAgenda } from './agenda';
+import {
+  alternar as alternarAlarma,
+  cargarEstado as cargarAlarmasGuardadas,
+  crear as crearAlarma,
+  eliminar as eliminarAlarma,
+  guardarEstado as guardarAlarmas,
+  ordenadas,
+  reconciliar,
+  vencidas,
+  type Alarma,
+  type EstadoAlarmas,
+} from './alarmas';
+import { borrarCache, CLAVES, guardarCache, hace, leerCache } from './almacen';
+import { obtenerClima, type Clima } from './clima';
+import { finDelDia, inicioDelDia, normalizar, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
 import { iniciarChat, puenteNativo } from './chat';
 import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
 import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
@@ -39,13 +54,6 @@ interface Reproductor {
   dispositivoSalida?: string | null;
 }
 
-interface Clima {
-  ciudad: string;
-  tempC: number;
-  condicion: string;
-  icono: string;
-}
-
 /** Lo que manda el mac-agent en /estado y en los eventos `estado`. */
 interface EstadoMac {
   nombre: string;
@@ -63,8 +71,6 @@ interface EstadoMac {
   clima?: Clima | null;
   /** Recordatorios que acaban de vencer. */
   avisos?: Aviso[];
-  /** Alarmas que están sonando este minuto. */
-  alarmasActivas?: Alarma[];
   /** Firma del fondo de pantalla de la Mac: cuando cambia, se vuelve a descargar. */
   fondo?: string | null;
 }
@@ -75,24 +81,9 @@ interface Catalogo {
   escenas: { id: string; nombre: string }[];
   apps: { id: string; nombre: string }[];
   playlistsRapidas?: PlaylistRapida[];
-  rutinas?: { id: string; nombre: string; icono: string }[];
-}
-
-export interface Alarma {
-  id: string;
-  hora: string;
-  dias: number[];
-  titulo: string;
-  activa: boolean;
-}
-
-interface ResumenMac {
-  clima?: Clima | null;
-  eventosHoy?: { titulo: string; inicio: string; todoElDia?: boolean }[];
-  recordatoriosPendientes?: { id: string; titulo: string; vence: string | null }[];
-  alarmasHoy?: Alarma[];
-  saludo?: string;
-  hora?: string;
+  rutinas?: { id: string; nombre: string; icono: string; efectos?: string[]; frases?: string[] }[];
+  /** Cómo te llama el asistente; sirve para saludar cuando la Mac no responde. */
+  nombre?: string;
 }
 
 const $ = <T extends Element = HTMLElement>(id: string) => document.getElementById(id) as unknown as T;
@@ -102,8 +93,8 @@ let cerrarFlujo: (() => void) | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
 let tocandoVolumen = false;
 let ultimoEstadoMac: EstadoMac | null = null;
-let ultimoResumen: ResumenMac | null = null;
-let alarmasCache: Alarma[] = [];
+/** Las alarmas son de la tablet: se guardan y suenan aquí, con o sin la Mac. */
+let estadoAlarmas: EstadoAlarmas = cargarAlarmasGuardadas();
 let tocandoProgreso = false;
 let posicionLocalSeg = 0;
 let duracionLocalSeg = 0;
@@ -163,6 +154,7 @@ async function cargarFondo(e: Emparejamiento, firma: string | null) {
     const vidrio = await pedir('/fondo?v=vidrio').catch(() => null);
     if (vidrio) await aplicarVidrio(vidrio.blob).catch(() => limpiarVidrio());
     else limpiarVidrio();
+    void recordarFondo(entrega.blob, vidrio?.blob ?? null);
   } catch {
     // Mac apagada o sin red: se conserva el fondo que ya había.
   } finally {
@@ -170,7 +162,44 @@ async function cargarFondo(e: Emparejamiento, firma: string | null) {
   }
 }
 
+const aDataUrl = (blob: Blob) =>
+  new Promise<string>((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onload = () => resolver(String(lector.result));
+    lector.onerror = () => rechazar(lector.error);
+    lector.readAsDataURL(blob);
+  });
+
+/** El fondo se guarda en la tablet: con la Mac apagada (o al arrancar) se ve el último que tuvo. */
+async function recordarFondo(nitido: Blob, vidrio: Blob | null) {
+  try {
+    const grande = await aDataUrl(nitido);
+    if (grande.length > 700_000) return; // no vale la pena llenar la memoria de la tablet
+    guardarCache(CLAVES.fondo, grande);
+    if (vidrio) guardarCache(CLAVES.vidrio, await aDataUrl(vidrio));
+  } catch {
+    /* sin espacio: se baja de nuevo cuando la Mac responda */
+  }
+}
+
+/** Pone al instante el último fondo guardado, sin esperar a la Mac. */
+async function restaurarFondo() {
+  const nitido = leerCache<string>(CLAVES.fondo);
+  if (!nitido || urlFondoActual) return;
+  $('fondo-mac').style.backgroundImage = `url("${nitido.valor}")`;
+  const vidrio = leerCache<string>(CLAVES.vidrio);
+  if (!vidrio) return;
+  try {
+    const blob = await (await fetch(vidrio.valor)).blob();
+    if (!urlFondoActual) await aplicarVidrio(blob);
+  } catch {
+    /* sin vidrio: los widgets quedan lisos hasta que llegue el de la Mac */
+  }
+}
+
 function olvidarFondo() {
+  borrarCache(CLAVES.fondo);
+  borrarCache(CLAVES.vidrio);
   if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
   urlFondoActual = null;
   firmaFondo = null;
@@ -208,6 +237,8 @@ const diaSemana = new Intl.DateTimeFormat('es-CO', { weekday: 'short' });
 let nocheManual: boolean | null = null; // null = automático según la hora
 let despiertoHasta = 0;
 
+let minutosDesdeClima = 0;
+
 function pintarReloj() {
   const ahora = new Date();
   const hora = formatoHora.format(ahora);
@@ -224,6 +255,14 @@ function pintarReloj() {
   $('calendario-dia-semana').textContent = semana;
   $('calendario-dia').textContent = String(ahora.getDate());
   aplicarNoche();
+  // Cada minuto, sin la Mac: ¿suena una alarma?, ¿venció un recordatorio?, ¿cuánto lleva la Mac fuera?
+  evaluarAlarmas();
+  agendaUI.comprobarAvisos();
+  textoConexion();
+  if (++minutosDesdeClima >= 20) {
+    minutosDesdeClima = 0;
+    void refrescarClima();
+  }
   if (nocheAplicada) {
     // Un poco de movimiento cada minuto: un LCD que muestra lo mismo toda la noche puede marcarse.
     const d = desplazamientoHora(ahora);
@@ -275,7 +314,63 @@ $('noche').addEventListener('click', () => {
   despertarPanel(60_000);
 });
 
+// ---------- Clima (directo de internet, sin pasar por la Mac) ----------
+let climaTablet: { valor: Clima; en: number } | null = leerCache<Clima>(CLAVES.clima);
+
+function ciudadDelClima(): string | null {
+  return leerCache<string>(CLAVES.ciudad)?.valor ?? ultimoEstadoMac?.clima?.ciudad ?? null;
+}
+
+/** La ciudad se aprende de la Mac la primera vez y queda guardada en la tablet. */
+function recordarCiudad(ciudad: string) {
+  if (leerCache<string>(CLAVES.ciudad)?.valor === ciudad) return;
+  guardarCache(CLAVES.ciudad, ciudad);
+  void refrescarClima();
+}
+
+async function refrescarClima() {
+  const ciudad = ciudadDelClima();
+  if (!ciudad) return;
+  try {
+    const c = await obtenerClima(ciudad);
+    climaTablet = { valor: c, en: Date.now() };
+    guardarCache(CLAVES.clima, c);
+    pintarClima();
+  } catch {
+    /* sin internet: se queda con lo último que se supo */
+  }
+}
+
+/** Lo más fresco que se sepa: la lectura propia de la tablet, o la de la Mac, o la última guardada. */
+function climaActual(): Clima | null {
+  const propio = climaTablet && Date.now() - climaTablet.en < 3 * 3600_000 ? climaTablet.valor : null;
+  return propio ?? ultimoEstadoMac?.clima ?? climaTablet?.valor ?? null;
+}
+
+function pintarClima() {
+  const c = climaActual();
+  if (!c) {
+    $('clima').hidden = true;
+  } else {
+    $('clima').hidden = false;
+    $('clima-icono').textContent = c.icono;
+    $('clima-temp').textContent = `${c.tempC > 0 ? '+' : ''}${c.tempC}°`;
+    $('clima-ciudad').textContent = c.ciudad;
+    $('clima').title = c.condicion;
+  }
+  actualizarAhora();
+}
+
 // ---------- Tarjeta Ahora ----------
+const mismoDia = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** Eventos de hoy según lo último que respondió la Mac (guardado en la tablet). */
+function eventosDeHoy(): RespuestaAgenda['eventos'] {
+  const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda)?.valor;
+  const hoy = new Date();
+  return guardado ? guardado.eventos.filter((e) => mismoDia(new Date(e.inicio), hoy)) : [];
+}
+
 function actualizarAhora() {
   const ahora = new Date();
   const h = ahora.getHours();
@@ -295,24 +390,22 @@ function actualizarAhora() {
   if (elSaludo) elSaludo.textContent = saludo;
   if (elIcono) elIcono.textContent = icono;
 
-  const clima = ultimoResumen?.clima ?? ultimoEstadoMac?.clima;
+  const clima = climaActual();
   const textoClima = clima ? `${clima.tempC > 0 ? '+' : ''}${clima.tempC}° en ${clima.ciudad} (${clima.condicion.toLowerCase()})` : '';
 
   let mensajeResumen = '';
   if (periodo === 'manana') {
-    // Mañana (6-12): "Buenos días, Julian 🌅" + weather summary + today's event count from agenda + first alarm
-    const eventos = ultimoResumen?.eventosHoy ?? [];
-    const nEventos = eventos.length;
-    const primeraAlarma = alarmasCache.find((a) => a.activa);
+    // Mañana (6-12): clima, cuántos eventos hay hoy y la primera alarma
+    const nEventos = eventosDeHoy().length;
+    const primeraAlarma = ordenadas(estadoAlarmas.alarmas).find((a) => a.activa);
     const partes: string[] = [];
     if (textoClima) partes.push(textoClima);
     partes.push(nEventos === 0 ? 'Sin eventos hoy' : `${nEventos} evento${nEventos > 1 ? 's' : ''} hoy`);
     if (primeraAlarma) partes.push(`Alarma a las ${primeraAlarma.hora}`);
     mensajeResumen = partes.join(' · ');
   } else if (periodo === 'tarde') {
-    // Tarde (12-18): "Buenas tardes ☀️" + next upcoming event or "Nada pendiente"
-    const eventos = ultimoResumen?.eventosHoy ?? [];
-    const proximo = eventos.find((ev) => !ev.todoElDia && new Date(ev.inicio) >= ahora);
+    // Tarde (12-18): el próximo evento o «nada pendiente»
+    const proximo = eventosDeHoy().find((ev) => !ev.todoElDia && new Date(ev.inicio) >= ahora);
     if (proximo) {
       const horaEv = formatoHora.format(new Date(proximo.inicio));
       mensajeResumen = `${proximo.titulo} a las ${horaEv}${textoClima ? ` · ${textoClima}` : ''}`;
@@ -320,7 +413,6 @@ function actualizarAhora() {
       mensajeResumen = `Nada pendiente por hoy${textoClima ? ` · ${textoClima}` : ''}`;
     }
   } else if (periodo === 'noche') {
-    // Noche (18-22): "Buenas noches 🌙" + summary of tomorrow
     mensajeResumen = `Prepárate para descansar${textoClima ? ` · ${textoClima}` : ''}`;
   }
 
@@ -329,30 +421,58 @@ function actualizarAhora() {
 }
 
 let temporizadorResumen: number | undefined;
-async function cargarResumen(e: Emparejamiento) {
+
+// ---------- Alarmas (de la tablet; la Mac guarda una copia) ----------
+/** Cambia las alarmas, las guarda, las repinta y avisa a la Mac si responde. */
+function cambiarAlarmas(nuevo: EstadoAlarmas) {
+  estadoAlarmas = nuevo;
+  guardarAlarmas(estadoAlarmas);
+  pintarAlarmas();
+  actualizarAvisoSonido();
+  evaluarAlarmas();
+  void sincronizarAlarmas();
+}
+
+let sincronizandoAlarmas = false;
+
+/**
+ * Pone la copia de la Mac al día y adopta lo que ella tenga de más (alarmas puestas por voz).
+ * Si la Mac no responde no pasa nada: se reintenta cada minuto.
+ */
+async function sincronizarAlarmas() {
+  const e = emparejamiento;
+  if (!e || sincronizandoAlarmas) return;
+  sincronizandoAlarmas = true;
   try {
-    ultimoResumen = await llamar<ResumenMac>(e, '/resumen');
-    if (ultimoResumen?.alarmasHoy && !alarmasCache.length) {
-      pintarAlarmas(ultimoResumen.alarmasHoy);
+    const remotas = (await llamar<{ alarmas: Alarma[] }>(e, '/alarmas')).alarmas ?? [];
+    const plan = reconciliar(estadoAlarmas, remotas);
+    const cambio =
+      plan.estado.alarmas.length !== estadoAlarmas.alarmas.length ||
+      JSON.stringify(plan.estado.borradas) !== JSON.stringify(estadoAlarmas.borradas);
+    estadoAlarmas = plan.estado;
+    guardarAlarmas(estadoAlarmas);
+    if (cambio) {
+      pintarAlarmas();
+      actualizarAvisoSonido();
     }
-  } catch {
-    // Continúa con estado local si el endpoint no está disponible
+    for (const a of plan.crearEnMac) {
+      await llamar(e, '/alarmas', { id: a.id, hora: a.hora, titulo: a.titulo, dias: a.dias });
+      if (!a.activa) await llamar(e, `/alarmas/${encodeURIComponent(a.id)}/toggle`, {});
+    }
+    for (const id of plan.borrarEnMac) {
+      await fetch(`${e.agente}/alarmas/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${e.token}` } });
+    }
+    for (const id of plan.alternarEnMac) await llamar(e, `/alarmas/${encodeURIComponent(id)}/toggle`, {});
+  } catch (err) {
+    if (err instanceof ErrorNoAutorizado) desemparejar('El token ya no es válido. Vuelve a emparejar.');
+    /* si no, la Mac no responde: las alarmas siguen sonando desde la tablet */
+  } finally {
+    sincronizandoAlarmas = false;
   }
-  actualizarAhora();
 }
 
-// ---------- Alarmas ----------
-async function cargarAlarmas(e: Emparejamiento) {
-  try {
-    const res = await llamar<{ alarmas: Alarma[] }>(e, '/alarmas');
-    pintarAlarmas(res.alarmas ?? []);
-  } catch {
-    // Si falla la Mac
-  }
-}
-
-function pintarAlarmas(alarmas: Alarma[]) {
-  alarmasCache = alarmas;
+function pintarAlarmas() {
+  const alarmas = ordenadas(estadoAlarmas.alarmas);
   const lista = $('lista-alarmas');
   if (!lista) return;
   lista.textContent = '';
@@ -387,39 +507,16 @@ function pintarAlarmas(alarmas: Alarma[]) {
     bToggle.className = a.activa ? 'boton-toggle activa' : 'boton-toggle';
     bToggle.textContent = a.activa ? 'ACTIVA' : 'INACTIVA';
     bToggle.setAttribute('aria-label', `Alternar alarma ${a.titulo}`);
-    bToggle.addEventListener('click', async () => {
-      if (!emparejamiento) return;
-      bToggle.disabled = true;
-      try {
-        await llamar(emparejamiento, `/alarmas/${encodeURIComponent(a.id)}/toggle`, {});
-        await cargarAlarmas(emparejamiento);
-      } catch {
-        avisar('No se pudo alternar la alarma', true);
-      } finally {
-        bToggle.disabled = false;
-      }
-    });
+    bToggle.addEventListener('click', () => cambiarAlarmas(alternarAlarma(estadoAlarmas, a.id)));
 
     const bEliminar = document.createElement('button');
     bEliminar.type = 'button';
     bEliminar.className = 'boton-eliminar-alarma';
     bEliminar.textContent = '×';
     bEliminar.setAttribute('aria-label', `Eliminar alarma ${a.titulo}`);
-    bEliminar.addEventListener('click', async () => {
-      if (!emparejamiento) return;
-      bEliminar.disabled = true;
-      try {
-        await fetch(`${emparejamiento.agente}/alarmas/${encodeURIComponent(a.id)}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${emparejamiento.token}` },
-        });
-        avisar('Alarma eliminada');
-        await cargarAlarmas(emparejamiento);
-      } catch {
-        avisar('No se pudo eliminar la alarma', true);
-      } finally {
-        bEliminar.disabled = false;
-      }
+    bEliminar.addEventListener('click', () => {
+      cambiarAlarmas(eliminarAlarma(estadoAlarmas, a.id));
+      avisar('Alarma eliminada');
     });
 
     acciones.append(bToggle, bEliminar);
@@ -439,25 +536,17 @@ $('alarma-cancelar').addEventListener('click', () => {
   $('modal-alarma').hidden = true;
 });
 
-$<HTMLFormElement>('form-alarma').addEventListener('submit', async (ev) => {
+$<HTMLFormElement>('form-alarma').addEventListener('submit', (ev) => {
   ev.preventDefault();
-  if (!emparejamiento) return;
-  const hora = $<HTMLInputElement>('campo-alarma-hora').value.trim();
-  const titulo = $<HTMLInputElement>('campo-alarma-titulo').value.trim() || 'Alarma';
+  const hora = $<HTMLInputElement>('campo-alarma-hora').value.trim().slice(0, 5);
+  const titulo = $<HTMLInputElement>('campo-alarma-titulo').value.trim();
   if (!hora) return;
-
-  const submitBtn = (ev.target as HTMLFormElement).querySelector<HTMLButtonElement>('button[type="submit"]');
-  if (submitBtn) submitBtn.disabled = true;
-
   try {
-    await llamar(emparejamiento, '/alarmas', { hora, titulo });
+    cambiarAlarmas(crearAlarma(estadoAlarmas, hora, titulo));
     $('modal-alarma').hidden = true;
     avisar('Alarma creada');
-    await cargarAlarmas(emparejamiento);
   } catch (err) {
-    avisar(err instanceof Error ? err.message : 'Error al crear alarma', true);
-  } finally {
-    if (submitBtn) submitBtn.disabled = false;
+    avisar(err instanceof Error ? err.message : 'No se pudo crear la alarma', true);
   }
 });
 
@@ -466,27 +555,38 @@ let timerSegundosRestantes = 0;
 let timerSegundosTotales = 0;
 let timerIntervalo: number | undefined;
 
-function sonarPitidoTimer() {
+// Un solo contexto de audio para toda la página: Chrome limita cuántos se pueden abrir, y una alarma
+// que repite cada 4 s los agotaría. Además solo suena tras un toque de la persona en la pantalla.
+let contextoAudio: AudioContext | null = null;
+
+function audio(): AudioContext | null {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const t0 = ctx.currentTime;
-    for (let i = 0; i < 3; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const inicio = t0 + i * 0.5;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, inicio);
-      gain.gain.setValueAtTime(0.3, inicio);
-      gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(inicio);
-      osc.stop(inicio + 0.3);
-    }
+    if (!AudioCtx) return null;
+    contextoAudio ??= new AudioCtx();
+    if (contextoAudio.state === 'suspended') void contextoAudio.resume();
+    return contextoAudio;
   } catch {
-    /* contexto de audio no disponible */
+    return null;
+  }
+}
+
+function sonarPitidoTimer() {
+  const ctx = audio();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const inicio = t0 + i * 0.5;
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, inicio);
+    gain.gain.setValueAtTime(0.3, inicio);
+    gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(inicio);
+    osc.stop(inicio + 0.3);
   }
 }
 
@@ -692,16 +792,9 @@ function pintarEstado(e: EstadoMac) {
   $('uptime').textContent = duracion(e.uptimeSeg);
   $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
 
-  // Clima en la barra de menús
-  if (e.clima) {
-    $('clima').hidden = false;
-    $('clima-icono').textContent = e.clima.icono;
-    $('clima-temp').textContent = `${e.clima.tempC > 0 ? '+' : ''}${e.clima.tempC}°`;
-    $('clima-ciudad').textContent = e.clima.ciudad;
-    $('clima').title = e.clima.condicion;
-  } else {
-    $('clima').hidden = true;
-  }
+  // Clima: la tablet lo pide por su cuenta; aquí solo se aprende la ciudad de la Mac y se repinta.
+  if (e.clima) recordarCiudad(e.clima.ciudad);
+  pintarClima();
 
   // Reproductor
   const rep = e.reproductor;
@@ -783,7 +876,6 @@ function pintarEstado(e: EstadoMac) {
   }
 
   agendaUI.mostrarAvisos(e.avisos);
-  mostrarAlarmaSonando(e.alarmasActivas ?? []);
   actualizarAhora();
 
   ultimoVolumen = e.volumen;
@@ -806,11 +898,35 @@ const TEXTO_CONEXION: Record<EstadoConexion, string> = {
   'en-linea': 'Mac en línea',
   'sin-conexion': 'Mac sin conexión',
 };
+let conexionActual: EstadoConexion = 'conectando';
+let ultimaMarcaConexion = 0;
+
+/** Texto de la barra de menús: con la Mac fuera dice desde cuándo («Mac sin conexión · hace 3 h»). */
+function textoConexion() {
+  $('conexion').dataset.estado = conexionActual;
+  let t = TEXTO_CONEXION[conexionActual];
+  if (conexionActual === 'sin-conexion') {
+    const ultima = leerCache<number>(CLAVES.ultimaConexion);
+    if (ultima) t = `Mac sin conexión · ${hace(ultima.en)}`;
+  }
+  $('conexion-texto').textContent = t;
+}
+
 function pintarConexion(c: EstadoConexion) {
-  const el = $('conexion');
-  if (el.dataset.estado === c) return;
-  el.dataset.estado = c;
-  $('conexion-texto').textContent = TEXTO_CONEXION[c];
+  const anterior = conexionActual;
+  conexionActual = c;
+  if (c === 'en-linea' && Date.now() - ultimaMarcaConexion > 60_000) {
+    ultimaMarcaConexion = Date.now();
+    guardarCache(CLAVES.ultimaConexion, ultimaMarcaConexion);
+  }
+  // Con la Mac fuera, lo que solo ella puede hacer (música, apps, pantalla…) se ve apagado.
+  document.body.classList.toggle('mac-fuera', c === 'sin-conexion');
+  textoConexion();
+  // La Mac volvió: se refresca lo que se había quedado con datos guardados.
+  if (c === 'en-linea' && anterior === 'sin-conexion') {
+    agendaUI.recargar();
+    void sincronizarAlarmas();
+  }
 }
 
 // ---------- Acciones ----------
@@ -1006,18 +1122,65 @@ function aplicarEfectos(efectos: unknown) {
   }
 }
 
+let rutinasCatalogo: NonNullable<Catalogo['rutinas']> = [];
+let nombreUsuario = '';
+
+/** Lo que se hace al terminar una rutina: mostrar el texto, leerlo y aplicar los efectos en la tablet. */
+function mostrarRutina(texto: string, efectos: unknown) {
+  // Si la rutina apaga la pantalla (modo noche), un aviso brillante encima sobra: la voz ya lo dice.
+  if (!efectosConocidos(efectos).includes('modo-noche')) avisar(texto, false, duracionAviso(texto));
+  hablarTexto(texto);
+  aplicarEfectos(efectos);
+}
+
+/**
+ * La Mac no responde: se hace lo que la tablet puede (modo noche) y se lee un resumen con lo último que
+ * se supo de la agenda, el clima y las alarmas. Los textos son los mismos que arma la Mac.
+ */
+function rutinaSinMac(id: string): string | null {
+  const rutina = rutinasCatalogo.find((r) => r.id === id);
+  if (!rutina) {
+    avisar('No se pudo contactar a la Mac', true);
+    return null;
+  }
+  const ahora = new Date();
+  const manana = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1);
+  const agenda = leerCache<RespuestaAgenda>(CLAVES.agenda)?.valor;
+  const del = (dia: Date) => (agenda?.eventos ?? []).filter((e) => new Date(e.inicio) >= inicioDelDia(dia) && new Date(e.inicio) <= finDelDia(dia));
+  const coma = nombreUsuario ? `, ${nombreUsuario}` : '';
+
+  let partes: string[];
+  if (id === 'buenos-dias') {
+    partes = [`Buenos días${coma}.`, resumenManana({ ahora, clima: climaActual(), eventos: del(ahora), recordatorios: agenda?.recordatorios ?? [] })];
+  } else if (id === 'buenas-noches') {
+    partes = [`Buenas noches${coma}.`, 'La Mac no responde, así que hice solo lo de la tablet.', resumenNoche({ ahora, eventosManana: del(manana), alarmas: estadoAlarmas.alarmas }), 'Que descanses.'];
+  } else {
+    partes = [`${rutina.nombre}.`, 'La Mac no responde, así que hice solo lo de la tablet.'];
+  }
+  const texto = partes.filter(Boolean).join(' ');
+  mostrarRutina(texto, rutina.efectos);
+  return texto;
+}
+
+/** Lo que se escribió en el chat es justo la frase de una rutina («buenas noches»): la tablet la hace sola. */
+function rutinaDelChat(texto: string): string | null {
+  const dicho = sinRelleno(texto);
+  if (!dicho) return null;
+  const rutina = rutinasCatalogo.find((r) => (r.frases ?? []).some((f) => normalizar(f) === dicho));
+  return rutina ? rutinaSinMac(rutina.id) : null;
+}
+
 async function ejecutarRutina(id: string, boton?: HTMLButtonElement) {
   if (!emparejamiento) return;
   if (boton) boton.disabled = true;
   try {
     const r = await llamar<ResultadoRutina>(emparejamiento, `/rutinas/${encodeURIComponent(id)}`, {});
-    // Si la rutina apaga la pantalla (modo noche), un aviso brillante encima sobra: la voz ya lo dice.
-    if (!efectosConocidos(r.efectos).includes('modo-noche')) avisar(r.texto, false, duracionAviso(r.texto));
-    hablarTexto(r.texto);
-    aplicarEfectos(r.efectos);
+    mostrarRutina(r.texto, r.efectos);
   } catch (e) {
     if (e instanceof ErrorNoAutorizado) return desemparejar('El token ya no es válido. Vuelve a emparejar.');
-    avisar(e instanceof TypeError ? 'No se pudo contactar a la Mac' : (e as Error).message, true);
+    // Sin respuesta de la Mac (apagada, dormida, sin red): la tablet hace lo suyo.
+    if (e instanceof TypeError || e instanceof ErrorSinAgente) rutinaSinMac(id);
+    else avisar((e as Error).message, true);
   } finally {
     if (boton) boton.disabled = false;
   }
@@ -1074,55 +1237,75 @@ async function resumenDeLaManana() {
 }
 
 // ---------- Alarma sonando ----------
-// El agente manda en el estado las alarmas que coinciden con la hora de este minuto.
-let alarmaSonando: string | null = null;
-/** Clave «id@hora» de la alarma que se está mostrando, para silenciarla solo en este minuto. */
-let claveSonando: string | null = null;
-let alarmaSilenciada: string | null = null;
+// La tablet decide cuándo suena (la Mac ya no interviene) y suena hasta que se apaga o pasan 10 minutos.
+let alarmaSonando: Alarma | null = null;
+let sonandoDesde = 0;
 let temporizadorSonido: number | undefined;
+/** Alarmas ya apagadas hoy, por id, día y hora (para que no vuelvan a sonar en su mismo minuto). */
+const silenciadas = new Set<string>();
+const claveAlarma = (a: Alarma, ahora: Date) => `${a.id}|${claveDia(ahora)}|${a.hora}`;
+const DIEZ_MINUTOS = 10 * 60_000;
 
-function sonarAlarma(a: Alarma) {
+function sonarAlarma(a: Alarma, primera: boolean) {
   const nativo = puenteNativo();
-  if (nativo) nativo.hablar(`Alarma: ${a.titulo}`, false);
-  else sonarPitidoTimer();
+  if (nativo) return nativo.hablar(`Alarma: ${a.titulo}`, false);
+  sonarPitidoTimer();
+  if (primera) hablarTexto(`Alarma: ${a.titulo}`);
 }
 
-function mostrarAlarmaSonando(activas: Alarma[]) {
-  const aviso = $('aviso-alarma');
-  // Solo la que sigue vigente este minuto y no se ha detenido.
-  const a = activas.find((x) => `${x.id}@${x.hora}` !== alarmaSilenciada);
-  if (!a) {
-    if (alarmaSonando) {
-      aviso.hidden = true;
-      alarmaSonando = null;
-      clearInterval(temporizadorSonido);
-      temporizadorSonido = undefined;
-    }
-    if (!activas.length) alarmaSilenciada = null;
-    return;
-  }
-  if (alarmaSonando === a.id) return;
-  alarmaSonando = a.id;
-  claveSonando = `${a.id}@${a.hora}`;
+/** Mira si toca que suene alguna alarma. Se llama cada minuto, al arrancar y al cambiar las alarmas. */
+function evaluarAlarmas() {
+  const ahora = new Date();
+  if (alarmaSonando && Date.now() - sonandoDesde > DIEZ_MINUTOS) detenerAlarma(false);
+  if (alarmaSonando) return;
+  const a = vencidas(estadoAlarmas.alarmas, ahora).find((x) => !silenciadas.has(claveAlarma(x, ahora)));
+  if (a) empezarAlarma(a);
+}
+
+function empezarAlarma(a: Alarma) {
+  alarmaSonando = a;
+  sonandoDesde = Date.now();
   $('alarma-sonando-hora').textContent = a.hora;
   $('alarma-sonando-titulo').textContent = a.titulo;
-  aviso.hidden = false;
+  $('aviso-alarma').hidden = false;
   // Despierta el panel si estaba en modo noche.
-  despertarPanel(120_000);
-  sonarAlarma(a);
+  despertarPanel(DIEZ_MINUTOS);
+  sonarAlarma(a, true);
   clearInterval(temporizadorSonido);
-  temporizadorSonido = window.setInterval(() => sonarAlarma(a), 4000);
+  temporizadorSonido = window.setInterval(() => sonarAlarma(a, false), 4000);
 }
 
-$('alarma-detener').addEventListener('click', () => {
-  alarmaSilenciada = claveSonando;
+function detenerAlarma(porLaPersona: boolean) {
+  if (alarmaSonando) silenciadas.add(claveAlarma(alarmaSonando, new Date(sonandoDesde)));
   $('aviso-alarma').hidden = true;
   alarmaSonando = null;
   clearInterval(temporizadorSonido);
   temporizadorSonido = undefined;
   window.speechSynthesis?.cancel();
-  void resumenDeLaManana();
-});
+  despertarPanel(60_000);
+  if (porLaPersona) void resumenDeLaManana();
+}
+
+$('alarma-detener').addEventListener('click', () => detenerAlarma(true));
+
+// Chrome no deja sonar hasta que alguien toca la pantalla una vez: si hay alarmas puestas y aún no se
+// ha tocado, se avisa para que una alarma de madrugada no se quede muda tras un reinicio.
+function actualizarAvisoSonido() {
+  const hayAlarmas = estadoAlarmas.alarmas.some((a) => a.activa);
+  const activacion = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  $('aviso-sonido').hidden = !hayAlarmas || activacion?.hasBeenActive !== false;
+}
+
+for (const evento of ['pointerdown', 'keydown', 'touchstart']) {
+  window.addEventListener(
+    evento,
+    () => {
+      audio();
+      actualizarAvisoSonido();
+    },
+    { passive: true },
+  );
+}
 
 // ---------- Emparejamiento ----------
 function mostrarEmparejar(error = '') {
@@ -1140,14 +1323,15 @@ function desemparejar(error = '') {
   clearInterval(temporizadorResumen);
   temporizadorResumen = undefined;
   olvidarFondo();
+  for (const clave of [CLAVES.catalogo, CLAVES.agenda, CLAVES.ultimaConexion]) borrarCache(clave);
   detenerTimer();
   mostrarEmparejar(error);
 }
 
-async function iniciar(e: Emparejamiento) {
-  const catalogo = await llamar<Catalogo>(e, '/catalogo');
-  emparejamiento = e;
-  guardarEmparejamiento(e);
+/** Pone en pantalla lo que la Mac ofrece (botones, rutinas, chat, agenda). Sirve con datos vivos o guardados. */
+function aplicarCatalogo(catalogo: Catalogo) {
+  nombreUsuario = catalogo.nombre ?? '';
+  rutinasCatalogo = catalogo.rutinas ?? [];
   pintarBotones('escenas', 'escena.ejecutar', catalogo.escenas);
   pintarBotones('apps', 'app.abrir', catalogo.apps);
   pintarRutinas(catalogo.rutinas ?? []);
@@ -1163,6 +1347,14 @@ async function iniciar(e: Emparejamiento) {
     $(dock).hidden = !activo;
     $(pagina).hidden = !activo;
   }
+}
+
+async function iniciar(e: Emparejamiento) {
+  const catalogo = await llamar<Catalogo>(e, '/catalogo');
+  guardarCache(CLAVES.catalogo, catalogo);
+  emparejamiento = e;
+  guardarEmparejamiento(e);
+  aplicarCatalogo(catalogo);
   $('pantalla-emparejar').hidden = true;
   $('pantalla-panel').hidden = false;
   void mantenerPantalla();
@@ -1173,15 +1365,11 @@ async function iniciar(e: Emparejamiento) {
   // Con pantallas nuevas disponibles (o no), la que se mira sigue siendo válida y el vidrio se realinea.
   mostrarPagina(paginaActual);
 
-  // Resumen y Alarmas
-  void cargarResumen(e);
-  void cargarAlarmas(e);
+  // Las alarmas son de la tablet; cada minuto se pone al día la copia de la Mac (si responde).
+  void sincronizarAlarmas();
   clearInterval(temporizadorResumen);
   temporizadorResumen = window.setInterval(() => {
-    if (emparejamiento) {
-      void cargarResumen(emparejamiento);
-      void cargarAlarmas(emparejamiento);
-    }
+    if (emparejamiento) void sincronizarAlarmas();
   }, 60_000);
 
   abrirEstado(e);
@@ -1306,6 +1494,8 @@ const agendaUI = iniciarAgenda({
 });
 
 iniciarChat({
+  // La Mac no responde: si era una rutina, se hace aquí; para lo demás hace falta la Mac (o la IA).
+  alSinMac: rutinaDelChat,
   // Si Claude tocó la agenda, la tarjeta se actualiza al momento.
   alAcciones: (acciones) => {
     if (acciones.some((a) => a.herramienta.startsWith('agenda.'))) agendaUI.recargar();
@@ -1440,10 +1630,26 @@ async function arrancar() {
   pintarReloj();
   inicializarNavegacion();
   iniciarVidrio();
+  // Lo propio de la tablet se pone al instante, sin esperar a nadie: fondo, alarmas y clima guardados.
+  void restaurarFondo();
+  pintarAlarmas();
+  actualizarAvisoSonido();
+  evaluarAlarmas();
+  pintarClima();
+  void refrescarClima();
   const desdeHash = emparejamientoDesdeHash(location.hash);
   if (desdeHash) history.replaceState(null, '', location.pathname); // el token no se queda en la barra ni en el historial
   const guardado = desdeHash ?? cargarEmparejamiento();
   if (!guardado) return mostrarEmparejar();
+  // Esta tablet ya es de esta Mac: si se guardó su catálogo, el panel aparece de una vez con lo último que se supo.
+  const catalogoGuardado = leerCache<Catalogo>(CLAVES.catalogo);
+  if (catalogoGuardado) {
+    emparejamiento = guardado;
+    $('pantalla-panel').hidden = false;
+    aplicarCatalogo(catalogoGuardado.valor);
+    mostrarPagina(paginaActual);
+    aplicarNoche();
+  }
   // Solo con el token: la dirección de la Mac se descubre de la publicada (cifrada).
   if (!guardado.agente) guardado.agente = (await consultarAgentePublicado(guardado.token)) ?? '';
   try {

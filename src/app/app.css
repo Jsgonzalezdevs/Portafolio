@@ -847,6 +847,29 @@ input:focus { outline: none; border-color: var(--azul); }
 
 #boton-ajustes.presionado { background: var(--rojo); color: #fff; }
 
+/* ---------- Con la Mac fuera ---------- */
+/* Lo que solo la Mac puede hacer (música, apps, pantalla…) se ve apagado y no responde al toque. */
+.mac-fuera .solo-mac { opacity: 0.4; pointer-events: none; }
+.agenda .nota-cache { margin: 0 0 0.55rem; font-size: 0.75rem; color: var(--naranja); }
+
+/* ---------- Aviso para activar el sonido ---------- */
+.aviso-sonido {
+  position: fixed;
+  top: 2.3rem;
+  left: 50%;
+  z-index: 25;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(255, 159, 10, 0.5);
+  border-radius: 1rem;
+  background: rgba(52, 52, 56, 0.97);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+/* De noche, una línea apagada abajo: no debe iluminar el cuarto. */
+.noche-activa .aviso-sonido { top: auto; bottom: 1.5rem; border: 0; background: transparent; color: #7a4e2c; }
+
 /* ---------- Esta tablet (cuidado de la batería) ---------- */
 .menubar__tablet[data-tono='aviso'] { color: var(--naranja); }
 .menubar__tablet[data-tono='alerta'] { color: var(--rojo); font-weight: 600; }

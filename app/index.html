@@ -83,7 +83,7 @@
           </div>
 
           <div class="columna">
-            <section id="tarjeta-control" class="tarjeta vidrio musica" aria-labelledby="t-control">
+            <section id="tarjeta-control" class="tarjeta vidrio musica solo-mac" aria-labelledby="t-control">
               <div id="musica-ambiente" class="musica__ambiente" aria-hidden="true"></div>
               <div class="tarjeta__cabecera">
                 <h2 id="t-control">Reproduciendo</h2>
@@ -134,7 +134,7 @@
               </div>
             </section>
 
-            <section class="tarjeta vidrio accesos" aria-label="Controles de la Mac">
+            <section class="tarjeta vidrio accesos solo-mac" aria-label="Controles de la Mac">
               <button class="acceso" type="button" data-accion="pantalla.apagar">
                 <span class="acceso__icono"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6.2l.6 2H16v1.5H8V19h1.6l.6-2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
                 <span class="acceso__texto">Apagar pantalla</span>
@@ -172,7 +172,7 @@
         <!-- MAC: monitor, casa y apps -->
         <section class="pagina pagina--mac" data-pagina="mac" data-titulo="Mac y Casa">
           <div class="columna">
-            <section id="tarjeta-mac" class="tarjeta vidrio monitor" aria-labelledby="t-mac">
+            <section id="tarjeta-mac" class="tarjeta vidrio monitor solo-mac" aria-labelledby="t-mac">
               <div class="tarjeta__cabecera">
                 <h2 id="t-mac"><span id="mac-nombre">Mac</span></h2>
                 <small id="mac-sistema" class="tenue"></small>
@@ -203,9 +203,9 @@
             <section id="tarjeta-escenas" class="tarjeta vidrio" aria-labelledby="t-escenas">
               <h2 id="t-escenas">Casa</h2>
               <div id="rutinas" class="rejilla" hidden></div>
-              <div id="escenas" class="rejilla"><p class="tenue rejilla__vacia">Aún no hay escenas. Se añaden en la configuración del agente.</p></div>
+              <div id="escenas" class="rejilla solo-mac"><p class="tenue rejilla__vacia">Aún no hay escenas. Se añaden en la configuración del agente.</p></div>
             </section>
-            <section id="tarjeta-apps" class="tarjeta vidrio lanzador" aria-labelledby="t-apps">
+            <section id="tarjeta-apps" class="tarjeta vidrio lanzador solo-mac" aria-labelledby="t-apps">
               <h2 id="t-apps">Apps</h2>
               <div id="apps" class="lanzador__rejilla"><p class="tenue rejilla__vacia">Sin apps permitidas.</p></div>
             </section>
@@ -339,6 +339,8 @@
 
     <div id="noche" class="noche" hidden><div id="noche-hora" class="noche__hora"></div></div>
     <div id="aviso" class="aviso" role="status" hidden></div>
+    <!-- Chrome no deja sonar hasta que alguien toca la pantalla una vez -->
+    <div id="aviso-sonido" class="aviso-sonido" role="status" hidden>🔔 Toca la pantalla una vez para que las alarmas suenen</div>
 
     <script type="module" src="/src/app/main.ts"></script>
   </body>

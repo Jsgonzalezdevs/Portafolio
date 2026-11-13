@@ -2,6 +2,7 @@ import { ErrorDeAccion } from './acciones.ts';
 import type { Evento, Recordatorio } from './agenda.ts';
 import type { Alarma } from './alarmas.ts';
 import type { Clima } from './estado.ts';
+import { finDelDia, inicioDelDia, lista, normalizar, resumenManana, resumenNoche, sinRelleno } from './hablar.ts';
 
 /**
  * Rutinas: varias acciones y un resumen hablado con una sola frase («buenas noches»,
@@ -128,76 +129,11 @@ export function validarRutinas(crudo: unknown): Rutina[] {
 
 // ---------- Reconocer la frase ----------
 
-export function normalizar(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+export { normalizar, sinRelleno } from './hablar.ts';
 
-const RELLENO_INICIO = /^(?:(?:hola|hey|oye|ok|okay|jarvis|asistente|computer|por favor)\s+)+/;
-const RELLENO_FINAL = /(?:\s+(?:por favor|gracias|jarvis|asistente))+$/;
+// ---------- Hablar bien (compartido con el panel de la tablet) ----------
 
-/** Quita saludos y cortesías de los bordes: «Jarvis, buenas noches, gracias» → «buenas noches». */
-export function sinRelleno(texto: string): string {
-  return normalizar(texto).replace(RELLENO_INICIO, '').replace(RELLENO_FINAL, '').trim();
-}
-
-// ---------- Hablar bien ----------
-
-/** «a las 6 menos cuarto de la mañana», «a la 1 de la tarde»: como se dice, para que la voz suene natural. */
-export function horaHablada(fecha: Date): string {
-  const h = fecha.getHours();
-  const m = fecha.getMinutes();
-  // Con «menos» se nombra la hora siguiente: 5:45 → «6 menos cuarto».
-  const base = (m === 45 ? h + 1 : h) % 24;
-  const h12 = base % 12 === 0 ? 12 : base % 12;
-  const articulo = h12 === 1 ? 'a la' : 'a las';
-  const minutos = m === 0 ? '' : m === 15 ? ' y cuarto' : m === 30 ? ' y media' : m === 45 ? ' menos cuarto' : ` y ${m}`;
-  const franja =
-    m === 0 && base === 12 ? 'del mediodía' : m === 0 && base === 0 ? 'de la medianoche' : base < 6 ? 'de la madrugada' : base < 12 ? 'de la mañana' : base < 20 ? 'de la tarde' : 'de la noche';
-  return `${articulo} ${h12}${minutos} ${franja}`;
-}
-
-/** Quita emojis y símbolos de un título para leerlo en voz alta («☕ 🍽️ Cena & Descanso» → «Cena y Descanso»). */
-export function paraVoz(titulo: string): string {
-  const limpio = titulo
-    .replace(/[\p{Extended_Pictographic}\u200d\ufe0f\u20e3]/gu, '')
-    .replace(/&/g, ' y ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return limpio || titulo.trim();
-}
-
-/** «a, b y c» */
-export function lista(items: string[]): string {
-  if (items.length <= 1) return items.join('');
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
-}
-
-const cuantos = (n: number, singular: string, plural: string) => (n === 1 ? `un ${singular}` : `${n} ${plural}`);
-
-/** La próxima vez que suena una alarma activa (respeta los días de la semana), o null. */
-export function proximaAlarma(alarmas: Alarma[], ahora: Date): Date | null {
-  let mejor: Date | null = null;
-  for (const a of alarmas) {
-    if (!a.activa) continue;
-    const [hh, mm] = a.hora.split(':').map(Number);
-    for (let d = 0; d <= 7; d++) {
-      const c = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + d, hh, mm, 0, 0);
-      if (c.getTime() <= ahora.getTime()) continue;
-      if (a.dias.length && !a.dias.includes(c.getDay())) continue;
-      if (!mejor || c < mejor) mejor = c;
-      break;
-    }
-  }
-  return mejor;
-}
-
-const mismoDia = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+export { horaHablada, lista, paraVoz, proximaAlarma } from './hablar.ts';
 
 // ---------- De dónde salen los datos del resumen ----------
 
@@ -247,8 +183,9 @@ export class Rutinas {
     this.nombre = opciones.nombre ?? '';
   }
 
-  listar(): { id: string; nombre: string; icono: string }[] {
-    return this.o.rutinas.map(({ id, nombre, icono }) => ({ id, nombre, icono }));
+  /** Frases incluidas: la tablet reconoce la rutina sola cuando la Mac no responde. */
+  listar(): { id: string; nombre: string; icono: string; efectos: Efecto[]; frases: string[] }[] {
+    return this.o.rutinas.map(({ id, nombre, icono, efectos, frases }) => ({ id, nombre, icono, efectos, frases }));
   }
 
   /** La rutina que dispara esta frase (entera, sin contar saludos ni cortesías), o null. */
@@ -307,7 +244,6 @@ export class Rutinas {
   private async resumen(tipo: 'manana' | 'noche'): Promise<string> {
     const f = this.o.fuentes;
     const ahora = f.ahora();
-    const partes: string[] = [];
     const intentar = async <T>(fn: (() => Promise<T>) | undefined, vacio: T): Promise<T> => {
       if (!fn) return vacio;
       try {
@@ -323,42 +259,10 @@ export class Rutinas {
         intentar(() => (f.eventos ?? SIN)(inicioDelDia(ahora), finDelDia(ahora)), [] as Evento[]),
         intentar(f.recordatorios, [] as Recordatorio[]),
       ]);
-      if (clima) partes.push(`Ahora mismo en ${clima.ciudad}: ${clima.condicion.toLowerCase()}, ${Math.round(clima.tempC)} grados.`);
-
-      const conHora = eventos.filter((e) => !e.todoElDia).sort((a, b) => a.inicio.localeCompare(b.inicio));
-      if (!conHora.length) partes.push('Hoy no tienes eventos.');
-      else {
-        const proximos = conHora.filter((e) => new Date(e.inicio) > ahora).slice(0, 2);
-        const cabeza = `Tienes ${cuantos(conHora.length, 'evento', 'eventos')} hoy.`;
-        partes.push(
-          proximos.length
-            ? `${cabeza} Lo próximo: ${lista(proximos.map((e) => `${paraVoz(e.titulo)} ${horaHablada(new Date(e.inicio))}`))}.`
-            : `${cabeza} Ya no te queda ninguno por delante.`,
-        );
-      }
-
-      if (recordatorios.length) {
-        const titulos = recordatorios.slice(0, 3).map((r) => paraVoz(r.titulo));
-        partes.push(
-          recordatorios.length <= 3
-            ? `Tienes ${cuantos(recordatorios.length, 'recordatorio', 'recordatorios')}: ${lista(titulos)}.`
-            : `Tienes ${recordatorios.length} recordatorios pendientes, entre ellos ${lista(titulos.slice(0, 2))}.`,
-        );
-      }
-    } else {
-      const manana = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1);
-      const eventos = await intentar(() => (f.eventos ?? SIN)(inicioDelDia(manana), finDelDia(manana)), [] as Evento[]);
-      const primero = eventos.filter((e) => !e.todoElDia).sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
-      partes.push(primero ? `Mañana tu primer evento es ${paraVoz(primero.titulo)} ${horaHablada(new Date(primero.inicio))}.` : 'Mañana no tienes eventos.');
-
-      const alarma = proximaAlarma(f.alarmas?.() ?? [], ahora);
-      if (alarma) partes.push(`Tu próxima alarma suena ${mismoDia(alarma, ahora) ? 'hoy ' : mismoDia(alarma, manana) ? '' : 'el ' + diaSemana(alarma) + ' '}${horaHablada(alarma)}.`);
+      return resumenManana({ ahora, clima, eventos, recordatorios });
     }
-    return partes.join(' ');
+    const manana = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1);
+    const eventosManana = await intentar(() => (f.eventos ?? SIN)(inicioDelDia(manana), finDelDia(manana)), [] as Evento[]);
+    return resumenNoche({ ahora, eventosManana, alarmas: f.alarmas?.() ?? [] });
   }
 }
-
-const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-const diaSemana = (d: Date) => DIAS[d.getDay()];
-const inicioDelDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-const finDelDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 0);

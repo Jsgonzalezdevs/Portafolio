@@ -1,10 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import html from '../../app/index.html?raw';
-import { agruparEventos, iniciarAgenda } from './agenda';
+import { agruparEventos, avisosVencidos, combinarAvisos, iniciarAgenda } from './agenda';
 
 const cuerpo = /<body>([\s\S]*)<script/.exec(html)![1];
 
 describe('agenda en el panel', () => {
+  describe('avisos de recordatorios sin la Mac', () => {
+    const ahora = new Date(2026, 10, 11, 15, 0).getTime();
+    const rec = (id: string, minutosAntes: number | null) => ({
+      id,
+      titulo: `Tarea ${id}`,
+      vence: minutosAntes === null ? null : new Date(ahora - minutosAntes * 60_000).toISOString(),
+    });
+
+    it('avisa de los que vencieron hace poco y no de los futuros, viejos o sin hora', () => {
+      const r = avisosVencidos([rec('a', 2), rec('b', -30), rec('c', 120), rec('d', null)], {}, ahora);
+      expect(r.map((x) => x.id)).toEqual(['a']);
+    });
+
+    it('no repite los que ya se cerraron en la tablet', () => {
+      expect(avisosVencidos([rec('a', 2)], { a: ahora - 1000 }, ahora)).toEqual([]);
+    });
+
+    it('une los de la Mac y los de la tablet sin duplicar', () => {
+      const mac = [{ id: 'a', titulo: 'Tarea a', vence: '2026-11-11T19:58:00.000Z' }];
+      const propios = avisosVencidos([rec('a', 2), rec('b', 5)], {}, ahora);
+      expect(combinarAvisos(mac, propios).map((x) => x.id)).toEqual(['a', 'b']);
+    });
+  });
+
   it('agrupa los eventos en hoy y mañana', () => {
     const ahora = new Date(2026, 10, 11, 15, 0);
     const ev = (d: Date, titulo: string) => ({ titulo, inicio: d.toISOString(), todoElDia: false });
