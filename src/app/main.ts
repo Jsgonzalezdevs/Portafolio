@@ -17,6 +17,7 @@ import { iniciarChat, puenteNativo } from './chat';
 import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
 import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
 import { desplazamientoHora, nocheActiva } from './noche';
+import { claveDia, debeResumirManana, duracionAviso, efectosConocidos } from './rutinas';
 import { bytes, duracion, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
 
 export interface PlaylistRapida {
@@ -74,6 +75,7 @@ interface Catalogo {
   escenas: { id: string; nombre: string }[];
   apps: { id: string; nombre: string }[];
   playlistsRapidas?: PlaylistRapida[];
+  rutinas?: { id: string; nombre: string; icono: string }[];
 }
 
 export interface Alarma {
@@ -178,13 +180,24 @@ function olvidarFondo() {
 
 // ---------- Avisos ----------
 let temporizadorAviso: number | undefined;
-function avisar(texto: string, error = false) {
+function avisar(texto: string, error = false, ms = 3500) {
   const el = $('aviso');
   el.textContent = texto;
   el.className = error ? 'aviso error-aviso' : 'aviso';
   el.hidden = false;
   clearTimeout(temporizadorAviso);
-  temporizadorAviso = window.setTimeout(() => (el.hidden = true), 3500);
+  temporizadorAviso = window.setTimeout(() => (el.hidden = true), ms);
+}
+
+/** Lee un texto en voz alta: con la voz de la app Android si está, o la del navegador. */
+function hablarTexto(texto: string) {
+  const nativo = puenteNativo();
+  if (nativo) return nativo.hablar(texto, false);
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = 'es-CO';
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
 }
 
 // ---------- Reloj y modo noche ----------
@@ -974,6 +987,92 @@ function pintarBotones(contenedor: string, accionId: string, items: { id: string
   }
 }
 
+// ---------- Rutinas («buenas noches», «buenos días») ----------
+const rutinasDisponibles = new Set<string>();
+
+interface ResultadoRutina {
+  texto: string;
+  efectos?: unknown;
+}
+
+/** Lo que el agente no puede hacer y le toca a la tablet (hoy: pasar a modo noche). */
+function aplicarEfectos(efectos: unknown) {
+  for (const e of efectosConocidos(efectos)) {
+    if (e === 'modo-noche') {
+      nocheManual = true;
+      despiertoHasta = 0;
+      aplicarNoche();
+    }
+  }
+}
+
+async function ejecutarRutina(id: string, boton?: HTMLButtonElement) {
+  if (!emparejamiento) return;
+  if (boton) boton.disabled = true;
+  try {
+    const r = await llamar<ResultadoRutina>(emparejamiento, `/rutinas/${encodeURIComponent(id)}`, {});
+    // Si la rutina apaga la pantalla (modo noche), un aviso brillante encima sobra: la voz ya lo dice.
+    if (!efectosConocidos(r.efectos).includes('modo-noche')) avisar(r.texto, false, duracionAviso(r.texto));
+    hablarTexto(r.texto);
+    aplicarEfectos(r.efectos);
+  } catch (e) {
+    if (e instanceof ErrorNoAutorizado) return desemparejar('El token ya no es válido. Vuelve a emparejar.');
+    avisar(e instanceof TypeError ? 'No se pudo contactar a la Mac' : (e as Error).message, true);
+  } finally {
+    if (boton) boton.disabled = false;
+  }
+}
+
+document.addEventListener('click', (ev) => {
+  const boton = (ev.target as HTMLElement).closest<HTMLButtonElement>('button[data-rutina]');
+  if (boton) void ejecutarRutina(boton.dataset.rutina!, boton);
+});
+
+function pintarRutinas(items: { id: string; nombre: string; icono: string }[]) {
+  rutinasDisponibles.clear();
+  const caja = $('rutinas');
+  caja.textContent = '';
+  caja.hidden = !items.length;
+  for (const r of items) {
+    rutinasDisponibles.add(r.id);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'boton boton--escena';
+    b.dataset.rutina = r.id;
+    const icono = document.createElement('span');
+    icono.className = 'escena-icono';
+    icono.textContent = r.icono;
+    const nombre = document.createElement('span');
+    nombre.className = 'escena-nombre';
+    nombre.textContent = r.nombre;
+    b.append(icono, nombre);
+    caja.appendChild(b);
+  }
+  // Sin escenas pero con rutinas, el aviso de «aún no hay escenas» sobra.
+  $('escenas').hidden = items.length > 0 && !$('escenas').querySelector('button');
+}
+
+const CLAVE_RESUMEN = 'asistente.resumenManana';
+
+/** Al apagar la alarma de la mañana, el resumen del día en voz alta (una vez al día). */
+async function resumenDeLaManana() {
+  if (!rutinasDisponibles.has('buenos-dias')) return;
+  const ahora = new Date();
+  let ultimo: string | null = null;
+  try {
+    ultimo = localStorage.getItem(CLAVE_RESUMEN);
+  } catch {
+    /* sin almacenamiento: se repetiría tras recargar */
+  }
+  if (!debeResumirManana(ahora, ultimo)) return;
+  try {
+    localStorage.setItem(CLAVE_RESUMEN, claveDia(ahora));
+  } catch {
+    /* idem */
+  }
+  await ejecutarRutina('buenos-dias');
+}
+
 // ---------- Alarma sonando ----------
 // El agente manda en el estado las alarmas que coinciden con la hora de este minuto.
 let alarmaSonando: string | null = null;
@@ -1022,6 +1121,7 @@ $('alarma-detener').addEventListener('click', () => {
   clearInterval(temporizadorSonido);
   temporizadorSonido = undefined;
   window.speechSynthesis?.cancel();
+  void resumenDeLaManana();
 });
 
 // ---------- Emparejamiento ----------
@@ -1050,6 +1150,7 @@ async function iniciar(e: Emparejamiento) {
   guardarEmparejamiento(e);
   pintarBotones('escenas', 'escena.ejecutar', catalogo.escenas);
   pintarBotones('apps', 'app.abrir', catalogo.apps);
+  pintarRutinas(catalogo.rutinas ?? []);
   pintarPlaylistsRapidas(catalogo.playlistsRapidas ?? []);
   $('tarjeta-chat').hidden = !catalogo.chat;
   agendaUI.activar(Boolean(catalogo.agenda));
@@ -1200,12 +1301,7 @@ window.addEventListener('asistente-nativo', (ev) => {
 const agendaUI = iniciarAgenda({
   emparejamiento: () => emparejamiento,
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
-  hablar: (texto) => {
-    if (nativo) return nativo.hablar(texto, false);
-    const u = new SpeechSynthesisUtterance(texto);
-    u.lang = 'es-CO';
-    window.speechSynthesis?.speak(u);
-  },
+  hablar: hablarTexto,
   despertar: () => despertarPanel(60_000),
 });
 
@@ -1214,6 +1310,7 @@ iniciarChat({
   alAcciones: (acciones) => {
     if (acciones.some((a) => a.herramienta.startsWith('agenda.'))) agendaUI.recargar();
   },
+  alEfectos: aplicarEfectos,
   emparejamiento: () => emparejamiento,
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
 });

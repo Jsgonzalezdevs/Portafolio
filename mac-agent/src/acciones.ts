@@ -81,6 +81,40 @@ export function crearAcciones(config: Pick<Config, 'escenas' | 'apps'>, run: Eje
         return silenciar ? 'Audio silenciado' : 'Audio activado';
       },
     },
+    'media.pausar': {
+      descripcion: 'Pausa la música si está sonando (si no hay nada sonando, no hace nada)',
+      ejecutar: async () => {
+        const app = (await osa(`
+if application "Spotify" is running then
+  tell application "Spotify"
+    if player state is playing then
+      pause
+      return "Spotify"
+    end if
+  end tell
+end if
+if application "Music" is running then
+  tell application "Music"
+    if player state is playing then
+      pause
+      return "Música"
+    end if
+  end tell
+end if
+return ""`)).trim();
+        return app ? `Música pausada en ${app}` : 'No había música sonando';
+      },
+    },
+    'volumen.limitar': {
+      descripcion: 'Baja el volumen a un máximo (si ya estaba más bajo, lo deja como está)',
+      ejecutar: async (p) => {
+        const maximo = entero(p, 'maximo', 0, 100);
+        const actual = Number((await osa('output volume of (get volume settings)')).trim());
+        if (Number.isFinite(actual) && actual <= maximo) return `El volumen ya estaba en ${actual}%`;
+        await osa(`set volume output volume ${maximo} without output muted`);
+        return `Volumen bajado a ${maximo}%`;
+      },
+    },
     'media.playpause': media('playpause', 'Reproducir/pausar'),
     'media.siguiente': media('next track', 'Siguiente canción'),
     'media.anterior': media('previous track', 'Canción anterior'),

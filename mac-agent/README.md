@@ -89,6 +89,57 @@ usar herramientas, sobre todo con fechas.
 Sin ninguna llave, el chat responde que falta y el resto del panel sigue
 funcionando.
 
+## Rutinas de voz
+
+Una frase (o un toque en «Casa») hace varias cosas y lee un resumen. Vienen dos de fábrica, sin
+configurar nada:
+
+- **«Buenos días»** (también «buen día», «resumen del día»): lee el clima, cuántos eventos tienes hoy,
+  los dos próximos y tus recordatorios. Además, **al apagar la alarma de la mañana** (entre las 4:00 y
+  las 11:00, una vez al día) la tablet lo lee sola.
+- **«Buenas noches»** (también «me voy a dormir», «a dormir», «modo dormir»): pausa la música, baja el
+  volumen a 20 % si estaba más alto, apaga la pantalla de la Mac, pasa la tablet a modo noche y dice
+  cuál es tu primer evento de mañana y a qué hora suena tu alarma.
+
+Se reconocen sin gastar la IA (instantáneo y gratis), solo si es la frase entera: «Jarvis, buenas
+noches, gracias» funciona; «buenas noches, ¿qué hora es?» va a la IA como una pregunta normal. Si lo
+dices de otra forma («prepárate que me voy a acostar»), la IA usa la herramienta `ejecutar_rutina`.
+
+**Cambiarlas o crear otras** en `config.json › rutinas` (cada clave es un id; lo que no pongas queda de
+fábrica):
+
+```json
+{
+  "asistente": { "nombre": "Julian" },
+  "rutinas": {
+    "buenas-noches": {
+      "pasos": [
+        { "accion": "media.pausar" },
+        { "accion": "volumen.limitar", "params": { "maximo": 10 } },
+        { "accion": "escena.ejecutar", "params": { "id": "luces-off" } }
+      ]
+    },
+    "cine": {
+      "nombre": "Cine",
+      "icono": "🎬",
+      "frases": ["modo cine", "vamos a ver una película"],
+      "pasos": [{ "accion": "volumen.fijar", "params": { "nivel": 40 } }],
+      "efectos": ["modo-noche"],
+      "resumen": "ninguno"
+    }
+  }
+}
+```
+
+Los pasos son acciones de la lista blanca (`GET /catalogo` las lista): nunca comandos libres. Un paso
+que falla no frena los demás. Una escena que requiere confirmación nunca corre dentro de una rutina.
+`efectos` es lo que le toca a la tablet (hoy: `modo-noche`) y `resumen` es `manana`, `noche` o
+`ninguno`. Después de editar, reinicia el agente.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/rutinas/:id` | Ejecuta la rutina → `{ texto, pasos, efectos }` |
+
 ## Agenda: Calendario y Recordatorios
 
 El agente usa el **Calendario y los Recordatorios de macOS** (EventKit) a

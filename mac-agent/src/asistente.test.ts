@@ -260,3 +260,62 @@ test('herramientas de alarmas: solo existen si hay alarmas, y operan sobre Gesto
   assert.equal(alarmasFalsas.length, 1);
   assert.equal(alarmasFalsas[0].id, 'alm-2');
 });
+
+test('rutinas: «buenas noches» se resuelve sin llamar a la IA y devuelve el efecto para el panel', async () => {
+  const g = guion([]); // si llamara a la IA, el guion vacío fallaría
+  const ejecutadas: string[] = [];
+  const asistente = new Asistente({
+    config,
+    acciones: crearAcciones(config, async () => ''),
+    leerEstado: async () => ({}) as EstadoMac,
+    crearMensaje: g.crear,
+    rutinas: {
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      porFrase: (t) => (/buenas noches/i.test(t) ? ({ id: 'buenas-noches' } as never) : null),
+      ejecutar: async (id) => {
+        ejecutadas.push(id);
+        return {
+          id,
+          nombre: 'Buenas noches',
+          texto: 'Buenas noches, Julian. Que descanses.',
+          pasos: [{ accion: 'pantalla.apagar', ok: true, mensaje: 'Pantalla apagada' }],
+          efectos: ['modo-noche'],
+        };
+      },
+    },
+  });
+  const r = await asistente.conversar('Buenas noches');
+  assert.deepEqual(ejecutadas, ['buenas-noches']);
+  assert.equal(g.peticiones.length, 0, 'ni una llamada a la IA');
+  assert.deepEqual(r, {
+    respuesta: 'Buenas noches, Julian. Que descanses.',
+    acciones: [{ herramienta: 'pantalla.apagar', ok: true, mensaje: 'Pantalla apagada' }],
+    esperandoConfirmacion: false,
+    efectos: ['modo-noche'],
+  });
+});
+
+test('rutinas: si la frase no es exacta, la IA usa la herramienta ejecutar_rutina y el efecto llega al panel', async () => {
+  const g = guion([
+    mensaje('tool_use', [herramienta('r1', 'ejecutar_rutina', { id: 'buenas-noches' })]),
+    mensaje('end_turn', [texto('Buenas noches, Julian. Que descanses.')]),
+  ]);
+  const asistente = new Asistente({
+    config,
+    acciones: crearAcciones(config, async () => ''),
+    leerEstado: async () => ({}) as EstadoMac,
+    crearMensaje: g.crear,
+    rutinas: {
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      porFrase: () => null,
+      ejecutar: async (id) => ({ id, nombre: 'Buenas noches', texto: 'Buenas noches, Julian. Que descanses.', pasos: [], efectos: ['modo-noche'] }),
+    },
+  });
+  const r = await asistente.conversar('prepárate que me voy a acostar ya');
+  const herramientas = g.peticiones[0].tools as { name: string; input_schema: { properties: { id: { enum: string[] } } } }[];
+  const tool = herramientas.find((t) => t.name === 'ejecutar_rutina')!;
+  assert.deepEqual(tool.input_schema.properties.id.enum, ['buenas-noches']);
+  assert.deepEqual(r.efectos, ['modo-noche']);
+  assert.deepEqual(r.acciones, [{ herramienta: 'rutina.buenas-noches', ok: true, mensaje: 'Rutina «Buenas noches»' }]);
+  assert.equal(r.respuesta, 'Buenas noches, Julian. Que descanses.');
+});

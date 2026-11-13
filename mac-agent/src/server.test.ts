@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { crearAcciones } from './acciones.ts';
+import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { GestorAlarmas } from './alarmas.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
@@ -387,6 +387,52 @@ test('GET /resumen: devuelve saludo, hora, clima, eventos, recordatorios y alarm
   } finally {
     s.close();
     rmSync(tmpCarpeta, { recursive: true, force: true });
+  }
+});
+
+
+test('rutinas: el catálogo las lista, POST /rutinas/:id las ejecuta (con token) y 404 si no existe', async () => {
+  const ejecutadas: string[] = [];
+  const s = crearServidor({
+    config,
+    monitor: { leer: async () => estadoFalso },
+    acciones: crearAcciones(config, async () => ''),
+    rutinas: {
+      listar: () => [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }],
+      porFrase: () => null,
+      ejecutar: async (id: string) => {
+        if (id !== 'buenas-noches') throw new ErrorDeAccion('Rutina desconocida', 404);
+        ejecutadas.push(id);
+        return { id, nombre: 'Buenas noches', texto: 'Buenas noches.', pasos: [], efectos: ['modo-noche' as const] };
+      },
+    },
+    log: () => {},
+  });
+  await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  const b = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  try {
+    const cat = (await (await fetch(`${b}/catalogo`, { headers: auth })).json()) as { rutinas: unknown[] };
+    assert.deepEqual(cat.rutinas, [{ id: 'buenas-noches', nombre: 'Buenas noches', icono: '🌙' }]);
+
+    assert.equal((await fetch(`${b}/rutinas/buenas-noches`, { method: 'POST' })).status, 401);
+    const ok = await fetch(`${b}/rutinas/buenas-noches`, { method: 'POST', headers: auth });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { ok: true, id: 'buenas-noches', nombre: 'Buenas noches', texto: 'Buenas noches.', pasos: [], efectos: ['modo-noche'] });
+    assert.deepEqual(ejecutadas, ['buenas-noches']);
+    assert.equal((await fetch(`${b}/rutinas/inventada`, { method: 'POST', headers: auth })).status, 404);
+  } finally {
+    s.close();
+  }
+
+  // Sin rutinas activadas en el agente: 404 limpio y catálogo vacío.
+  const sin = crearServidor({ config, monitor: { leer: async () => estadoFalso }, acciones: crearAcciones(config, async () => ''), log: () => {} });
+  await new Promise<void>((r) => sin.listen(0, '127.0.0.1', r));
+  const b2 = `http://127.0.0.1:${(sin.address() as AddressInfo).port}`;
+  try {
+    assert.equal((await fetch(`${b2}/rutinas/buenas-noches`, { method: 'POST', headers: auth })).status, 404);
+    assert.deepEqual(((await (await fetch(`${b2}/catalogo`, { headers: auth })).json()) as { rutinas: unknown[] }).rutinas, []);
+  } finally {
+    sin.close();
   }
 });
 

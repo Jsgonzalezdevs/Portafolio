@@ -1,3 +1,4 @@
+import { validarRutinas, type Rutina } from './rutinas.ts';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -28,6 +29,8 @@ export interface ConfigAsistente {
   esfuerzo: Esfuerzo;
   /** Minutos sin hablar tras los que se empieza una conversación nueva. */
   minutosConversacion: number;
+  /** Cómo te llama el asistente en los saludos de las rutinas («Buenos días, Julian»). */
+  nombre?: string;
 }
 
 export interface AppPermitida {
@@ -56,6 +59,8 @@ export interface Config {
   escenas: Escena[];
   apps: AppPermitida[];
   playlistsRapidas?: PlaylistRapida[];
+  /** Rutinas de voz («buenas noches»…): las de fábrica mezcladas con las de config.json. */
+  rutinas?: Rutina[];
   asistente: ConfigAsistente;
   /**
    * Dónde publicar la dirección del túnel (cifrada con el token) para que el
@@ -87,7 +92,7 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
     { id: 'gym', nombre: 'Gym', uri: 'spotify:playlist:37i9dQZF1DX76Wlfdnj7AP', icono: '⚡' },
     { id: 'lofi', nombre: 'Lo-Fi', uri: 'spotify:playlist:37i9dQZF1DXd9rSDyQguIk', icono: '🎧' },
   ],
-  asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10 },
+  asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10, nombre: 'Julian' },
 };
 
 const ESFUERZOS: Esfuerzo[] = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -154,7 +159,8 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
           typeof p?.icono === 'string',
       )
     : PREDETERMINADA.playlistsRapidas;
-  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, playlistsRapidas, asistente, publicar, ciudad };
+  const rutinas = validarRutinas((crudo as { rutinas?: unknown } | null)?.rutinas);
+  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, playlistsRapidas, asistente, publicar, ciudad, rutinas };
 }
 
 /** Token del dispositivo: AGENT_TOKEN si existe; si no, uno generado y guardado en .token (permisos 600). */

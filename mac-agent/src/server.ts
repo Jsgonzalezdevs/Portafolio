@@ -14,6 +14,7 @@ import { fondoInstalado, type Fondo } from './fondo.ts';
 import { Monitor, type EstadoMac } from './estado.ts';
 import { crearClienteGroq, MODELOS_GROQ } from './groq.ts';
 import { Publicador } from './publicador.ts';
+import { Rutinas } from './rutinas.ts';
 
 interface Dependencias {
   config: Config;
@@ -24,6 +25,7 @@ interface Dependencias {
   avisador?: Pick<Avisador, 'pendientes' | 'descartar' | 'olvidarPermiso'>;
   gestorAlarmas?: GestorAlarmas;
   fondo?: Pick<Fondo, 'firma' | 'imagen'>;
+  rutinas?: Pick<Rutinas, 'listar' | 'ejecutar' | 'porFrase'>;
   log?: (linea: string) => void;
   intervaloMs?: number;
 }
@@ -48,6 +50,7 @@ export function crearServidor({
   avisador,
   gestorAlarmas,
   fondo,
+  rutinas,
   log = console.log,
   intervaloMs = 3000,
 }: Dependencias): Server {
@@ -195,6 +198,7 @@ export function crearServidor({
           escenas: config.escenas.map(({ id, nombre }) => ({ id, nombre })),
           apps: config.apps.map(({ id, nombre }) => ({ id, nombre })),
           playlistsRapidas: config.playlistsRapidas ?? [],
+          rutinas: rutinas?.listar() ?? [],
           chat: Boolean(asistente),
           agenda: Boolean(agenda),
         });
@@ -386,6 +390,15 @@ export function crearServidor({
         return json(res, 404, { error: 'Ruta no encontrada' });
       }
 
+      const rutina = /^\/rutinas\/([a-z0-9-]+)$/.exec(url.pathname);
+      if (req.method === 'POST' && rutina) {
+        if (!rutinas) return json(res, 404, { error: 'Las rutinas no están activadas en este agente' });
+        const r = await rutinas.ejecutar(rutina[1]);
+        json(res, 200, { ok: true, ...r });
+        if (suscriptores.size) void muestrear();
+        return;
+      }
+
       if (req.method === 'POST' && url.pathname === '/chat') {
         if (!asistente) return json(res, 503, { error: 'El asistente no está activado en este agente' });
         const { texto, nueva } = await leerCuerpo(req);
@@ -434,6 +447,27 @@ if (import.meta.main) {
   const agenda = agendaInstalada(RAIZ, ejecutar);
   const avisador = agenda ? new Avisador(agenda) : undefined;
   const gestorAlarmas = new GestorAlarmas(RAIZ);
+  // Rutinas de voz: «buenas noches» y «buenos días» vienen de fábrica; config.json › rutinas las ajusta.
+  const rutinas = new Rutinas({
+    rutinas: config.rutinas ?? [],
+    acciones,
+    escenas: config.escenas,
+    nombre: config.asistente.nombre,
+    log,
+    fuentes: {
+      ahora: () => new Date(),
+      clima: async () => (await monitor.leer()).clima ?? null,
+      eventos: async (desde, hasta) => {
+        if (!agenda || (await agenda.permisos()).calendario !== 'concedido') return [];
+        return agenda.eventos(fechaLocal(desde), fechaLocal(hasta));
+      },
+      recordatorios: async () => {
+        if (!agenda || (await agenda.permisos()).recordatorios !== 'concedido') return [];
+        return agenda.recordatorios();
+      },
+      alarmas: () => gestorAlarmas.listar(),
+    },
+  });
   if (!agenda) log('agenda no instalada (falta «Agenda del asistente.app»): sin calendario ni recordatorios');
   // Proveedor del chat: con `auto`, basta con que exista la llave de Groq para usarlo.
   const claveGroq = cargarClaveGroq();
@@ -457,11 +491,13 @@ if (import.meta.main) {
     avisador,
     gestorAlarmas,
     fondo: fondoInstalado(RAIZ, ejecutar, log),
+    rutinas,
     asistente: new Asistente({
       config,
       acciones,
       agenda,
       alarmas: gestorAlarmas,
+      rutinas,
       leerEstado: () => monitor.leer(),
       crearMensaje,
       log,

@@ -13,12 +13,15 @@ interface RespuestaChat {
   respuesta: string;
   acciones: { herramienta: string; ok: boolean; mensaje: string }[];
   esperandoConfirmacion: boolean;
+  efectos?: string[];
 }
 
 interface Opciones {
   emparejamiento: () => Emparejamiento | null;
   alNoAutorizado: () => void;
   alAcciones?: (acciones: RespuestaChat['acciones']) => void;
+  /** Lo que le toca hacer al panel tras una rutina de voz (p. ej. «modo-noche»). */
+  alEfectos?: (efectos: unknown) => void;
 }
 
 /** Puente que expone la app Android (android/) dentro de su WebView. */
@@ -58,7 +61,7 @@ type Reconocimiento = {
   stop: () => void;
 };
 
-export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones }: Opciones) {
+export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const historial = $('chat-historial');
   const campo = $('chat-texto') as HTMLInputElement;
@@ -122,6 +125,8 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones }: Opci
       confirmar.hidden = !r.esperandoConfirmacion;
       // Si la IA pide confirmación por voz, la tablet escucha la respuesta sin esperar la palabra clave.
       if (porVoz) hablar(r.respuesta, r.esperandoConfirmacion);
+      // Después de empezar a hablar: el modo noche apaga la pantalla, pero la voz sigue.
+      if (r.efectos?.length) alEfectos?.(r.efectos);
     } catch (err) {
       pensando.className = 'chat__ia fallo';
       if (err instanceof ErrorNoAutorizado) {

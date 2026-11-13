@@ -7,6 +7,7 @@ import { resumirEventos, type Agenda } from './agenda.ts';
 import type { GestorAlarmas } from './alarmas.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
+import type { Efecto, Rutinas } from './rutinas.ts';
 
 /**
  * Cerebro conversacional: Claude con las acciones de la Mac como herramientas.
@@ -40,6 +41,8 @@ export interface RespuestaChat {
   acciones: AccionRealizada[];
   /** La IA está esperando un «sí» o «no» antes de ejecutar algo delicado. */
   esperandoConfirmacion: boolean;
+  /** Cosas que le toca hacer al panel (p. ej. «modo-noche» tras «buenas noches»). */
+  efectos?: Efecto[];
 }
 
 export class ErrorDeAsistente extends Error {
@@ -63,6 +66,8 @@ interface Dependencias {
   agenda?: Agenda;
   /** Gestor de alarmas de la tablet / Mac. */
   alarmas?: GestorAlarmas;
+  /** Rutinas de voz («buenas noches», «buenos días»). */
+  rutinas?: Pick<Rutinas, 'porFrase' | 'ejecutar' | 'listar'>;
   ahora?: () => Date;
   log?: (linea: string) => void;
 }
@@ -148,6 +153,7 @@ export function construirHerramientas(
   config: Pick<Config, 'escenas' | 'apps'>,
   conAgenda = false,
   conAlarmas = false,
+  rutinas: { id: string; nombre: string }[] = [],
 ): Anthropic.Beta.BetaTool[] {
   const herramientas: Anthropic.Beta.BetaTool[] = [
     {
@@ -200,6 +206,13 @@ export function construirHerramientas(
   }
   if (conAgenda) herramientas.push(...HERRAMIENTAS_AGENDA);
   if (conAlarmas) herramientas.push(...HERRAMIENTAS_ALARMAS);
+  if (rutinas.length) {
+    herramientas.push({
+      name: 'ejecutar_rutina',
+      description: `Ejecuta una rutina completa (varias acciones y un resumen hablado). Rutinas: ${rutinas.map((r) => `${r.id} (${r.nombre})`).join(', ')}.`,
+      input_schema: objeto({ id: { type: 'string', enum: rutinas.map((r) => r.id) } }, ['id']),
+    });
+  }
   return herramientas.map((h) => ({ ...h, strict: true }));
 }
 
@@ -212,6 +225,7 @@ Cómo respondes:
 - Nunca digas que hiciste algo si la herramienta falló o no la usaste; di qué pasó.
 - Si algo no está a tu alcance (no hay herramienta para eso), dilo en una frase y, si sirve, sugiere lo que sí puedes hacer.
 - Para preguntas generales responde de lo que sabes, breve. No tienes internet.
+- Si tienes la herramienta ejecutar_rutina, úsala cuando pidan una rutina («buenas noches», «buenos días», «prepárate para dormir»…) y responde exactamente con el texto que te devuelva, sin resumirlo ni añadir nada.
 - Si tienes herramientas de agenda, úsalas para eventos y recordatorios. «Mañana», «el viernes», «en dos horas»: calcúlalo con la fecha actual del mensaje.
 - Al contar la agenda no recites todo. Si hay más de cuatro eventos, di cuántos son, menciona los tres o cuatro que se salen de la rutina o tienen hora fija (citas, reuniones, entregas) y ofrece el detalle del resto. No nombres calendarios ni repitas eventos duplicados.
 - Di las horas como se hablan: «a las dos de la tarde», «a las ocho y media de la noche»; nunca «catorce» ni «veinte treinta».
@@ -263,7 +277,7 @@ export class Asistente {
 
   constructor(deps: Dependencias) {
     this.deps = deps;
-    this.herramientas = construirHerramientas(deps.config, Boolean(deps.agenda), Boolean(deps.alarmas));
+    this.herramientas = construirHerramientas(deps.config, Boolean(deps.agenda), Boolean(deps.alarmas), deps.rutinas?.listar() ?? []);
     this.ahora = deps.ahora ?? (() => new Date());
     this.log = deps.log ?? (() => {});
   }
@@ -281,8 +295,17 @@ export class Asistente {
   private async ejecutarHerramienta(
     uso: Anthropic.Beta.BetaToolUseBlock,
     c: Conversacion,
-  ): Promise<{ texto: string; error: boolean; registro?: AccionRealizada; bloqueada?: boolean }> {
+  ): Promise<{ texto: string; error: boolean; registro?: AccionRealizada; bloqueada?: boolean; efectos?: Efecto[] }> {
     const entrada = (uso.input ?? {}) as Record<string, unknown>;
+    if (uso.name === 'ejecutar_rutina' && this.deps.rutinas) {
+      try {
+        const r = await this.deps.rutinas.ejecutar(String(entrada.id));
+        return { texto: r.texto, error: false, efectos: r.efectos, registro: { herramienta: `rutina.${r.id}`, ok: true, mensaje: `Rutina «${r.nombre}»` } };
+      } catch (e) {
+        const mensaje = (e as Error).message;
+        return { texto: `Falló: ${mensaje}`, error: true, registro: { herramienta: `rutina.${String(entrada.id)}`, ok: false, mensaje } };
+      }
+    }
     if (uso.name === 'leer_estado_mac') return { texto: describirEstado(await this.deps.leerEstado()), error: false };
     const agenda = await this.usarAgenda(uso.name, entrada);
     if (agenda) return agenda;
@@ -419,6 +442,23 @@ export class Asistente {
     if (typeof textoCrudo !== 'string' || !textoCrudo.trim()) throw new ErrorDeAsistente('"texto" es obligatorio', 400);
     const texto = textoCrudo.trim().slice(0, MAX_TEXTO);
     if (this.ocupado) throw new ErrorDeAsistente('Sigo pensando en lo anterior, dame un segundo.', 409);
+
+    // «Buenas noches», «buenos días»… se reconocen aquí, sin gastar la IA: es instantáneo y siempre igual.
+    const rutina = this.deps.rutinas?.porFrase(texto);
+    if (rutina) {
+      this.ocupado = true;
+      try {
+        const r = await this.deps.rutinas!.ejecutar(rutina.id);
+        return {
+          respuesta: r.texto,
+          acciones: r.pasos.map((p) => ({ herramienta: p.accion, ok: p.ok, mensaje: p.mensaje })),
+          esperandoConfirmacion: false,
+          ...(r.efectos.length ? { efectos: r.efectos } : {}),
+        };
+      } finally {
+        this.ocupado = false;
+      }
+    }
     this.ocupado = true;
 
     const c = this.conversacionVigente(nueva);
@@ -427,6 +467,7 @@ export class Asistente {
     c.mensajes.push({ role: 'user', content: `[${this.formatoFecha.format(this.ahora())}] ${texto}` });
 
     const acciones: AccionRealizada[] = [];
+    const efectos = new Set<Efecto>();
     let esperandoConfirmacion = false;
     try {
       for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
@@ -458,7 +499,7 @@ export class Asistente {
             .map((b) => b.text)
             .join(' ')
             .trim();
-          return { respuesta: respuesta || 'Listo.', acciones, esperandoConfirmacion };
+          return { respuesta: respuesta || 'Listo.', acciones, esperandoConfirmacion, ...(efectos.size ? { efectos: [...efectos] } : {}) };
         }
 
         // Todas las respuestas de herramientas van juntas en UN mensaje del usuario.
@@ -467,6 +508,7 @@ export class Asistente {
           const res = await this.ejecutarHerramienta(uso, c);
           if (res.registro) acciones.push(res.registro);
           if (res.bloqueada) esperandoConfirmacion = true;
+          for (const e of res.efectos ?? []) efectos.add(e);
           resultados.push({ type: 'tool_result', tool_use_id: uso.id, content: res.texto, is_error: res.error });
         }
         c.mensajes.push({ role: 'user', content: resultados });
