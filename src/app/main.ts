@@ -27,7 +27,9 @@ import {
 } from './alarmas';
 import { borrarCache, CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { obtenerClima, type Clima } from './clima';
-import { finDelDia, inicioDelDia, normalizar, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
+import { finDelDia, horaHablada, inicioDelDia, normalizar, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
+import { duracionHablada, interpretar, responderConsulta } from './comandos';
+import { alFalloDeVoz, audio, callar, diagnosticar, explicar, fijarVozActiva, hablar as hablarWeb, pitido, probar, vozActiva, type Diagnostico } from './sonido';
 import { iniciarChat, puenteNativo } from './chat';
 import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
 import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
@@ -218,15 +220,11 @@ function avisar(texto: string, error = false, ms = 3500) {
   temporizadorAviso = window.setTimeout(() => (el.hidden = true), ms);
 }
 
-/** Lee un texto en voz alta: con la voz de la app Android si está, o la del navegador. */
+/** Lee un texto en voz alta: con la voz de la app Android si está, o la del navegador (si no está silenciada). */
 function hablarTexto(texto: string) {
   const nativo = puenteNativo();
   if (nativo) return nativo.hablar(texto, false);
-  if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(texto);
-  u.lang = 'es-CO';
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+  if (vozActiva()) void hablarWeb(texto);
 }
 
 // ---------- Reloj y modo noche ----------
@@ -555,41 +553,6 @@ let timerSegundosRestantes = 0;
 let timerSegundosTotales = 0;
 let timerIntervalo: number | undefined;
 
-// Un solo contexto de audio para toda la página: Chrome limita cuántos se pueden abrir, y una alarma
-// que repite cada 4 s los agotaría. Además solo suena tras un toque de la persona en la pantalla.
-let contextoAudio: AudioContext | null = null;
-
-function audio(): AudioContext | null {
-  try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return null;
-    contextoAudio ??= new AudioCtx();
-    if (contextoAudio.state === 'suspended') void contextoAudio.resume();
-    return contextoAudio;
-  } catch {
-    return null;
-  }
-}
-
-function sonarPitidoTimer() {
-  const ctx = audio();
-  if (!ctx) return;
-  const t0 = ctx.currentTime;
-  for (let i = 0; i < 3; i++) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const inicio = t0 + i * 0.5;
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, inicio);
-    gain.gain.setValueAtTime(0.3, inicio);
-    gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(inicio);
-    osc.stop(inicio + 0.3);
-  }
-}
-
 function actualizarTimerUI() {
   const texto = formatoTiempoTimer(timerSegundosRestantes);
   $('timer-cuenta').textContent = texto;
@@ -615,8 +578,7 @@ function iniciarTimer(minutos: number) {
     timerSegundosRestantes--;
     if (timerSegundosRestantes <= 0) {
       detenerTimer();
-      sonarPitidoTimer();
-      avisar('⏱ ¡Temporizador finalizado!');
+      empezarSonidoTemporizador();
     } else {
       actualizarTimerUI();
     }
@@ -1249,8 +1211,42 @@ const DIEZ_MINUTOS = 10 * 60_000;
 function sonarAlarma(a: Alarma, primera: boolean) {
   const nativo = puenteNativo();
   if (nativo) return nativo.hablar(`Alarma: ${a.titulo}`, false);
-  sonarPitidoTimer();
+  pitido();
   if (primera) hablarTexto(`Alarma: ${a.titulo}`);
+}
+
+/** El temporizador también suena hasta que se apaga (o 2 minutos), con un aviso que no se puede perder. */
+const DOS_MINUTOS = 2 * 60_000;
+let temporizadorSonando = false;
+
+function mostrarSonando(etiqueta: string, hora: string, titulo: string) {
+  $('alarma-sonando-etiqueta').textContent = etiqueta;
+  $('alarma-sonando-hora').textContent = hora;
+  $('alarma-sonando-titulo').textContent = titulo;
+  $('aviso-alarma').hidden = false;
+  // Despierta el panel si estaba en modo noche.
+  despertarPanel(DIEZ_MINUTOS);
+}
+
+function sonarTemporizador(primera: boolean) {
+  const nativo = puenteNativo();
+  if (nativo) return nativo.hablar('El temporizador terminó', false);
+  pitido();
+  if (primera) hablarTexto('El temporizador terminó.');
+}
+
+function empezarSonidoTemporizador() {
+  // Si una alarma ya está sonando, ella ya hace ruido: el temporizador no la pisa.
+  if (alarmaSonando) return;
+  temporizadorSonando = true;
+  sonandoDesde = Date.now();
+  mostrarSonando('Temporizador', '00:00', '¡Se acabó el tiempo!');
+  sonarTemporizador(true);
+  clearInterval(temporizadorSonido);
+  temporizadorSonido = window.setInterval(() => {
+    if (Date.now() - sonandoDesde > DOS_MINUTOS) detenerAlarma(false);
+    else sonarTemporizador(false);
+  }, 4000);
 }
 
 /** Mira si toca que suene alguna alarma. Se llama cada minuto, al arrancar y al cambiar las alarmas. */
@@ -1264,26 +1260,26 @@ function evaluarAlarmas() {
 
 function empezarAlarma(a: Alarma) {
   alarmaSonando = a;
+  temporizadorSonando = false;
   sonandoDesde = Date.now();
-  $('alarma-sonando-hora').textContent = a.hora;
-  $('alarma-sonando-titulo').textContent = a.titulo;
-  $('aviso-alarma').hidden = false;
-  // Despierta el panel si estaba en modo noche.
-  despertarPanel(DIEZ_MINUTOS);
+  mostrarSonando('Alarma', a.hora, a.titulo);
   sonarAlarma(a, true);
   clearInterval(temporizadorSonido);
   temporizadorSonido = window.setInterval(() => sonarAlarma(a, false), 4000);
 }
 
 function detenerAlarma(porLaPersona: boolean) {
+  const eraAlarma = alarmaSonando !== null;
   if (alarmaSonando) silenciadas.add(claveAlarma(alarmaSonando, new Date(sonandoDesde)));
   $('aviso-alarma').hidden = true;
   alarmaSonando = null;
+  temporizadorSonando = false;
   clearInterval(temporizadorSonido);
   temporizadorSonido = undefined;
-  window.speechSynthesis?.cancel();
+  callar();
   despertarPanel(60_000);
-  if (porLaPersona) void resumenDeLaManana();
+  // El resumen de la mañana es de la alarma, no del temporizador.
+  if (porLaPersona && eraAlarma) void resumenDeLaManana();
 }
 
 $('alarma-detener').addEventListener('click', () => detenerAlarma(true));
@@ -1462,6 +1458,8 @@ $('desemparejar-confirmar').addEventListener('click', () => {
 // En la app Android: botón de ajustes de voz, y la palabra clave despierta el modo noche.
 const nativo = puenteNativo();
 if (nativo) {
+  // La app Android tiene su propia voz y sus propios ajustes (botón «Voz»).
+  $('boton-sonido').hidden = true;
   $('boton-voz').hidden = false;
   $('boton-voz').addEventListener('click', () => nativo.ajustes());
   window.addEventListener('asistente-nativo', (ev) => {
@@ -1486,6 +1484,74 @@ window.addEventListener('asistente-nativo', (ev) => {
   if (d.tipo === 'bateria') pintarTablet(leerBateria(d));
 });
 
+/** Lo que se escribió o dijo es un comando que la tablet resuelve sola: lo hace y devuelve lo que contesta. */
+function comandoLocal(texto: string): string | null {
+  const ahora = new Date();
+  const c = interpretar(texto, ahora);
+  if (!c) return null;
+  const consulta = responderConsulta(c, { ahora, clima: climaActual(), alarmas: estadoAlarmas.alarmas });
+  if (consulta) return consulta;
+
+  switch (c.tipo) {
+    case 'temporizador': {
+      const habia = timerSegundosRestantes > 0;
+      iniciarTimer(c.segundos / 60);
+      return `${habia ? 'Reinicié el temporizador: ' : 'Listo, '}temporizador de ${duracionHablada(c.segundos)}.`;
+    }
+    case 'cancelar-temporizador': {
+      if (timerSegundosRestantes <= 0 && !temporizadorSonando) return 'No hay ningún temporizador en marcha.';
+      detenerTimer();
+      if (temporizadorSonando) detenerAlarma(false);
+      return 'Temporizador cancelado.';
+    }
+    case 'restante-temporizador':
+      return timerSegundosRestantes > 0 ? `Faltan ${duracionHablada(timerSegundosRestantes)}.` : 'No hay ningún temporizador en marcha.';
+    case 'alarma': {
+      const [hh, mm] = c.hora.split(':').map(Number);
+      const dicha = horaHablada(new Date(2000, 0, 1, hh, mm));
+      const titulo = c.titulo || 'Alarma';
+      if (estadoAlarmas.alarmas.some((a) => a.hora === c.hora && a.dias.length === 0 && a.titulo === titulo)) return `Ya tenías una alarma ${dicha}.`;
+      cambiarAlarmas(crearAlarma(estadoAlarmas, c.hora, c.titulo));
+      return `Listo, alarma ${dicha}${c.titulo ? `: ${c.titulo}` : ''}, todos los días.`;
+    }
+    default:
+      return null;
+  }
+}
+
+// ---------- Sonido y voz (para ver por qué «no suena») ----------
+function pintarSonido(d: Diagnostico) {
+  const caja = $('sonido-estado');
+  caja.textContent = '';
+  for (const linea of explicar(d)) {
+    const li = document.createElement('li');
+    li.className = linea.tono === 'ok' ? 'sonido__ok' : 'sonido__aviso';
+    li.textContent = linea.texto;
+    caja.appendChild(li);
+  }
+}
+
+$('boton-sonido').addEventListener('click', () => {
+  $<HTMLInputElement>('sonido-voz').checked = vozActiva();
+  $('modal-sonido').hidden = false;
+  void diagnosticar().then(pintarSonido);
+});
+$('sonido-cerrar').addEventListener('click', () => {
+  $('modal-sonido').hidden = true;
+});
+$<HTMLInputElement>('sonido-voz').addEventListener('change', (ev) => fijarVozActiva((ev.target as HTMLInputElement).checked));
+$('sonido-probar').addEventListener('click', () => {
+  void probar().then(pintarSonido);
+});
+
+// Si el navegador no logra hablar, se avisa una vez (en vez de quedarse mudo sin decir nada).
+let avisadoFalloVoz = false;
+alFalloDeVoz(() => {
+  if (avisadoFalloVoz) return;
+  avisadoFalloVoz = true;
+  avisar('No pude hablar. Toca el 🔊 de arriba para ver por qué.', true, 7000);
+});
+
 const agendaUI = iniciarAgenda({
   emparejamiento: () => emparejamiento,
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
@@ -1494,6 +1560,8 @@ const agendaUI = iniciarAgenda({
 });
 
 iniciarChat({
+  // Hora, fecha, clima, temporizadores y alarmas: la tablet los resuelve sola, con o sin Mac.
+  alLocal: comandoLocal,
   // La Mac no responde: si era una rutina, se hace aquí; para lo demás hace falta la Mac (o la IA).
   alSinMac: rutinaDelChat,
   // Si Claude tocó la agenda, la tarjeta se actualiza al momento.
@@ -1694,3 +1762,13 @@ async function arrancarDeNuevo(e: Emparejamiento) {
 }
 
 void arrancar();
+
+// Que /app abra aunque la tablet se reinicie sin internet: ver public/app-sw.js. Solo en producción
+// (en desarrollo un caché viejo estorbaría) y sin que un fallo aquí pueda romper el panel.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-sw.js', { scope: '/app' }).catch(() => {
+      /* sin service worker el panel funciona igual, solo que necesita red para abrir */
+    });
+  });
+}

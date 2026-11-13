@@ -1,4 +1,5 @@
 import { ErrorNoAutorizado, ErrorSinAgente, llamar, type Emparejamiento } from './conexion';
+import { callar, hablar as hablarWeb, vozActiva } from './sonido';
 
 /**
  * Chat con el asistente (POST /chat del mac-agent).
@@ -27,6 +28,11 @@ interface Opciones {
    * que dijo; si no, null y se avisa de que la Mac no contesta.
    */
   alSinMac?: (texto: string) => string | null;
+  /**
+   * Comandos que la tablet resuelve sola (hora, temporizador, alarma…), antes de molestar a la Mac o a la
+   * IA. Devuelve lo que contesta, o null si no era uno.
+   */
+  alLocal?: (texto: string) => string | null;
 }
 
 /** Puente que expone la app Android (android/) dentro de su WebView. */
@@ -66,7 +72,7 @@ type Reconocimiento = {
   stop: () => void;
 };
 
-export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos, alSinMac }: Opciones) {
+export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos, alSinMac, alLocal }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const historial = $('chat-historial');
   const campo = $('chat-texto') as HTMLInputElement;
@@ -92,21 +98,33 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
 
   function hablar(texto: string, escucharDespues = false) {
     if (nativo) return nativo.hablar(texto, escucharDespues);
-    const voz = window.speechSynthesis;
-    if (!voz) return;
-    voz.cancel();
-    const u = new SpeechSynthesisUtterance(texto);
-    u.lang = 'es-CO';
-    const espanola = voz.getVoices().find((v) => v.lang.toLowerCase().startsWith('es'));
-    if (espanola) u.voice = espanola;
-    voz.speak(u);
+    void hablarWeb(texto);
   }
+
+  /**
+   * ¿Se lee la respuesta en voz alta? En la app Android, solo si se preguntó por voz. En el navegador, siempre
+   * (aunque se haya escrito) mientras la voz no esté silenciada en el 🔊.
+   */
+  const debeHablar = (porVoz: boolean) => (nativo ? porVoz : vozActiva());
 
   async function enviar(texto: string, porVoz = false) {
     const e = emparejamiento();
     const limpio = texto.trim();
-    if (!e || !limpio || enviando) {
+    if (!limpio || enviando) {
       // La tablet espera una respuesta hablada: si no la habrá, que vuelva a escuchar la palabra clave.
+      if (porVoz) nativo?.listo();
+      return;
+    }
+    // Hora, temporizador, alarma…: la tablet lo hace sola, al instante y aunque no haya Mac.
+    const local = alLocal?.(limpio);
+    if (local) {
+      burbuja('chat__yo', limpio);
+      burbuja('chat__ia', local);
+      if (debeHablar(porVoz)) hablar(local);
+      else if (porVoz) nativo?.listo();
+      return;
+    }
+    if (!e) {
       if (porVoz) nativo?.listo();
       return;
     }
@@ -129,7 +147,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
       }
       confirmar.hidden = !r.esperandoConfirmacion;
       // Si la IA pide confirmación por voz, la tablet escucha la respuesta sin esperar la palabra clave.
-      if (porVoz) hablar(r.respuesta, r.esperandoConfirmacion);
+      if (debeHablar(porVoz)) hablar(r.respuesta, r.esperandoConfirmacion);
       // Después de empezar a hablar: el modo noche apaga la pantalla, pero la voz sigue.
       if (r.efectos?.length) alEfectos?.(r.efectos);
     } catch (err) {
@@ -148,7 +166,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
         }
         pensando.textContent = sinMac ? 'No pude contactar a la Mac.' : (err as Error).message;
       }
-      if (porVoz) hablar(pensando.textContent ?? 'Algo falló.');
+      if (debeHablar(porVoz)) hablar(pensando.textContent ?? 'Algo falló.');
     } finally {
       enviando = false;
       enviarBoton.disabled = false;
@@ -243,7 +261,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
       };
       activo = rec;
       mic.classList.add('escuchando');
-      window.speechSynthesis?.cancel();
+      callar();
       rec.start();
     });
   }

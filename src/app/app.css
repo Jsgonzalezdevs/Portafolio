@@ -852,6 +852,16 @@ input:focus { outline: none; border-color: var(--azul); }
 .mac-fuera .solo-mac { opacity: 0.4; pointer-events: none; }
 .agenda .nota-cache { margin: 0 0 0.55rem; font-size: 0.75rem; color: var(--naranja); }
 
+/* ---------- Sonido y voz ---------- */
+.sonido__voz { flex-direction: row; align-items: center; justify-content: center; gap: 0.6rem; margin: 0.4rem 0 0.8rem; font-size: 0.9rem; color: var(--texto); }
+.sonido__voz input { width: 1.2rem; height: 1.2rem; accent-color: var(--azul, #0a84ff); }
+.sonido__estado { margin: 0 0 0.6rem; padding: 0; list-style: none; font-size: 0.8125rem; text-align: left; }
+.sonido__estado li { margin: 0.3rem 0; padding-left: 1.3rem; position: relative; line-height: 1.35; }
+.sonido__estado li::before { position: absolute; left: 0; }
+.sonido__ok::before { content: '✓'; color: #30d158; }
+.sonido__aviso::before { content: '⚠'; color: var(--naranja, #ff9f0a); }
+.sonido__ayuda { margin: 0 0 0.9rem; font-size: 0.75rem; }
+
 /* ---------- Aviso para activar el sonido ---------- */
 .aviso-sonido {
   position: fixed;

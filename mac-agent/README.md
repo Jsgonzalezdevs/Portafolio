@@ -156,9 +156,31 @@ La Mac se duerme o se apaga; la tablet no debe quedar inútil. Lo que hace sola,
   (modo noche) y lee el resumen con lo guardado, con los mismos textos que arma la Mac (`src/hablar.ts`,
   compartido por los dos lados). Para ello `/catalogo` incluye las frases de cada rutina.
 
+- **Comandos propios en el chat** (instantáneos, sin IA, solo si es la frase entera): «¿qué hora es?»,
+  «¿qué día es hoy?», «¿cómo está el clima?», «temporizador de 10 minutos» / «avísame en 20 minutos»,
+  «cuánto falta del temporizador», «cancela el temporizador», «despiértame a las 6», «pon una alarma a las
+  7 y media de la noche para el gimnasio», «¿qué alarmas tengo?». Las alarmas por voz se repiten todos los
+  días, como las del botón +. Cualquier otra cosa («¿qué hora es en Tokio?») sigue su camino a la IA.
+- **Abrir sin internet**: un service worker (`public/app-sw.js`) guarda la página y sus archivos; si la tablet
+  se reinicia con el wifi caído, `/app` abre igual. Con red, siempre gana la versión nueva.
+
 Lo que sigue necesitando la Mac: la conversación con la IA, controlar la Mac y crear eventos/recordatorios.
 Un navegador no deja sonar nada hasta que alguien toca la pantalla una vez: por eso aparece un aviso
 «Toca la pantalla una vez para que las alarmas suenen» tras recargar (la app Android no lo necesita).
+
+## Sonido y voz en la tablet (navegador)
+
+Si «no suena» algo, toca el 🔊 de la barra de arriba: muestra si los tonos están activos y si la tablet
+tiene una voz en español, y «Probar sonido» hace un pitido y dice una frase. Qué hace el panel por su parte:
+
+- El asistente **responde en voz alta también lo que escribes** (antes solo lo que dictabas). Se apaga con
+  la casilla del 🔊.
+- La voz se parte en frases, espera a que Chrome cargue la lista de voces, elige la mejor en español y no
+  se pisa con la anterior (Chrome pierde un `speak()` pegado a un `cancel()`).
+- El **temporizador** ahora suena hasta que lo apagas (2 min) con un aviso grande; las alarmas, hasta 10 min.
+- Lo que el navegador no deja resolver: hasta que alguien toque la pantalla una vez no suena nada (aparece el
+  aviso), el **volumen de multimedia** de la tablet debe estar subido, y hace falta una voz de «Salida de texto
+  a voz» en español (Ajustes › Idioma y entrada). El 🔊 dice cuál de las tres falla.
 
 ## Agenda: Calendario y Recordatorios
 

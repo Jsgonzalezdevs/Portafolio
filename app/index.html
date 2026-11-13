@@ -51,6 +51,7 @@
             <span id="menubar-bateria-valor">--%</span>
           </span>
           <span id="conexion" class="menubar__item conexion" data-estado="conectando"><i class="conexion__punto"></i><span id="conexion-texto">Conectando…</span></span>
+          <button id="boton-sonido" class="menubar__boton" type="button" aria-label="Sonido y voz"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
           <button id="boton-voz" class="menubar__boton" type="button" hidden>Voz</button>
           <button id="boton-ajustes" class="menubar__boton" type="button" aria-label="Desemparejar (mantener presionado)"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
           <span id="menubar-reloj" class="menubar__reloj"></span>
@@ -258,7 +259,7 @@
     <!-- Alarma sonando -->
     <div id="aviso-alarma" class="modal" role="alertdialog" aria-labelledby="alarma-sonando-titulo" hidden>
       <div class="modal__caja">
-        <p class="modal__etiqueta">Alarma</p>
+        <p id="alarma-sonando-etiqueta" class="modal__etiqueta">Alarma</p>
         <p id="alarma-sonando-hora" class="modal__hora"></p>
         <p id="alarma-sonando-titulo" class="modal__titulo-grande"></p>
         <div class="fila fila--centrada">
@@ -321,6 +322,19 @@
     </div>
 
     <!-- Nueva alarma -->
+    <div id="modal-sonido" class="modal" role="dialog" aria-labelledby="sonido-titulo" hidden>
+      <div class="modal__caja modal__caja--angosta">
+        <h2 id="sonido-titulo" class="modal__titulo">Sonido y voz</h2>
+        <label class="sonido__voz"><input id="sonido-voz" type="checkbox" /> El asistente responde en voz alta</label>
+        <ul id="sonido-estado" class="sonido__estado"></ul>
+        <p class="tenue sonido__ayuda">Si pulsas «Probar sonido» y no oyes nada, sube el volumen de multimedia con los botones de la tablet.</p>
+        <div class="fila fila--centrada">
+          <button id="sonido-cerrar" class="boton" type="button">Cerrar</button>
+          <button id="sonido-probar" class="boton boton--primario" type="button">Probar sonido</button>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-alarma" class="modal" role="dialog" aria-labelledby="alarma-modal-titulo" hidden>
       <form id="form-alarma" class="modal__caja modal__caja--angosta modal__formulario" autocomplete="off">
         <h2 id="alarma-modal-titulo" class="modal__titulo">Nueva alarma</h2>
