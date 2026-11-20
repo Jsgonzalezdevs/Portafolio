@@ -29,7 +29,7 @@ import {
 import { borrarCache, CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { obtenerClima, type Clima } from './clima';
 import { finDelDia, horaHablada, inicioDelDia, normalizar, paraVoz, proximaAlarma, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
-import { enCuanto, estadoDelDia, primeroQueViene, quedan, respuestaAgenda } from './hoy';
+import { enCuanto, estadoDelDia, eventosPorAvisar, primeroQueViene, quedan, respuestaAgenda } from './hoy';
 import { duracionHablada, interpretar, responderConsulta } from './comandos';
 import { alFalloDeVoz, audio, callar, diagnosticar, explicar, fijarVozActiva, hablar as hablarWeb, pitido, probar, vozActiva, type Diagnostico } from './sonido';
 import { iniciarChat, puenteNativo } from './chat';
@@ -416,6 +416,36 @@ function agendaGuardada(): RespuestaAgenda['eventos'] | null {
 
 const formatoDiaCorto = new Intl.DateTimeFormat('es-CO', { weekday: 'short' });
 
+/** Eventos ya avisados (por título e inicio), guardados para no repetir tras una recarga. */
+const CLAVE_AVISADOS = 'asistente.eventosAvisados';
+function leerAvisados(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(CLAVE_AVISADOS) ?? '[]') as string[];
+  } catch {
+    return [];
+  }
+}
+
+/** «En 5 minutos: Almuerzo y Descanso», en pantalla y en voz alta. De noche no: nadie quiere que le hablen dormido. */
+function avisarEventosCercanos(eventos: RespuestaAgenda['eventos'], ahora: Date) {
+  const avisados = leerAvisados();
+  const nuevos = eventosPorAvisar(eventos, ahora, new Set(avisados));
+  if (!nuevos.length) return;
+  try {
+    localStorage.setItem(CLAVE_AVISADOS, JSON.stringify([...avisados, ...nuevos.map((n) => n.clave)].slice(-40)));
+  } catch {
+    /* sin almacenamiento */
+  }
+  const h = ahora.getHours();
+  if (nocheAplicada || h < 6 || h >= 22) return;
+  for (const { evento } of nuevos) {
+    // Mismo cálculo que la cuenta regresiva de «Hoy», para que digan lo mismo.
+    const min = Math.max(1, Math.ceil((new Date(evento.inicio).getTime() - ahora.getTime()) / 60_000));
+    avisar(`En ${min} min: ${evento.titulo}`, false, 15_000);
+    hablarTexto(`En ${min === 1 ? 'un minuto' : `${min} minutos`}: ${paraVoz(evento.titulo)}.`);
+  }
+}
+
 /** Tarjeta «Hoy»: lo que está pasando (con su avance) y lo que sigue, con cuenta regresiva. */
 function pintarHoy() {
   const ahora = new Date();
@@ -460,6 +490,8 @@ function pintarHoy() {
     li.textContent = eventos ? 'Nada más en el calendario. Día libre ✨' : 'La agenda aparece cuando la Mac responda.';
     ul.appendChild(li);
   }
+
+  avisarEventosCercanos(eventos ?? [], ahora);
 
   // Alarmas: cuánto falta para la próxima.
   const proxima = proximaAlarma(estadoAlarmas.alarmas, ahora);

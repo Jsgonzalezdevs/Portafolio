@@ -126,3 +126,16 @@ export function respuestaAgenda(eventos: EventoDia[] | null, ahora: Date): strin
   if (d.todoElDia.length) partes.push(`Todo el día: ${lista(d.todoElDia.map((e) => paraVoz(e.titulo)))}.`);
   return partes.join(' ');
 }
+
+/**
+ * Eventos con hora que empiezan dentro de `minutosAntes` (y aún no se avisaron). La clave incluye la
+ * hora de inicio: si el evento se mueve, se vuelve a avisar.
+ */
+export function eventosPorAvisar(eventos: EventoDia[], ahora: Date, avisados: Set<string>, minutosAntes = 5): { clave: string; evento: EventoDia }[] {
+  const t = ahora.getTime();
+  return eventos
+    .filter((e) => !e.todoElDia)
+    .map((e) => ({ clave: `${e.titulo}|${e.inicio}`, evento: e, falta: inicioDe(e) - t }))
+    .filter((x) => x.falta > 0 && x.falta <= minutosAntes * 60_000 && !avisados.has(x.clave))
+    .map(({ clave, evento }) => ({ clave, evento }));
+}

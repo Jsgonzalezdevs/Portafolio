@@ -66,3 +66,15 @@ describe('qué pasa hoy', () => {
     expect(respuestaAgenda(null, new Date())).toMatch(/Todavía no tengo/);
   });
 });
+
+describe('aviso antes de cada evento', () => {
+  it('avisa una vez, dentro de los 5 min previos', async () => {
+    const { eventosPorAvisar } = await import('./hoy');
+    const a = (h: number, m: number) => new Date(2026, 10, 20, h, m);
+    expect(eventosPorAvisar(DIA, a(12, 54), new Set())).toEqual([]);
+    const ahora = eventosPorAvisar(DIA, a(12, 56), new Set());
+    expect(ahora.map((x) => x.evento.titulo)).toEqual(['☕ 🍽️ Almuerzo & Descanso']);
+    expect(eventosPorAvisar(DIA, a(12, 58), new Set([ahora[0].clave]))).toEqual([]);
+    expect(eventosPorAvisar(DIA, a(13, 0), new Set())).toEqual([]);
+  });
+});
