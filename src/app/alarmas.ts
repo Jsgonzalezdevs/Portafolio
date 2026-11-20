@@ -120,3 +120,15 @@ export function guardarEstado(e: EstadoAlarmas): void {
     /* sin almacenamiento: las alarmas duran solo esta sesión */
   }
 }
+
+const LETRAS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+
+/** «Todos los días», «Lun–Vie», «Fin de semana» o «L X V»; exportado para tests. */
+export function textoDias(dias: number[]): string {
+  const d = [...new Set(dias)].filter((x) => x >= 0 && x <= 6).sort();
+  if (d.length === 0 || d.length === 7) return 'Todos los días';
+  if (d.join() === '1,2,3,4,5') return 'Lun–Vie';
+  if (d.join() === '0,6') return 'Fin de semana';
+  // Semana empezando en lunes, como se dice.
+  return [...d.filter((x) => x !== 0), ...d.filter((x) => x === 0)].map((x) => LETRAS[x]).join(' ');
+}

@@ -413,8 +413,25 @@
       <form id="form-alarma" class="modal__caja modal__caja--angosta modal__formulario" autocomplete="off">
         <h2 id="alarma-modal-titulo" class="modal__titulo">Nueva alarma</h2>
         <label>Hora
-          <input id="campo-alarma-hora" type="time" required />
+          <input id="campo-alarma-hora" type="time" required value="06:00" />
         </label>
+        <fieldset class="dias">
+          <legend>Días <span id="alarma-dias-texto" class="tenue">· Todos los días</span></legend>
+          <div class="dias__fila">
+            <button type="button" class="dia" data-dia="1" aria-pressed="false">L</button>
+            <button type="button" class="dia" data-dia="2" aria-pressed="false">M</button>
+            <button type="button" class="dia" data-dia="3" aria-pressed="false">X</button>
+            <button type="button" class="dia" data-dia="4" aria-pressed="false">J</button>
+            <button type="button" class="dia" data-dia="5" aria-pressed="false">V</button>
+            <button type="button" class="dia" data-dia="6" aria-pressed="false">S</button>
+            <button type="button" class="dia" data-dia="0" aria-pressed="false">D</button>
+          </div>
+          <div class="dias__atajos">
+            <button type="button" class="dias__atajo" data-dias="">Todos</button>
+            <button type="button" class="dias__atajo" data-dias="1,2,3,4,5">Lun–Vie</button>
+            <button type="button" class="dias__atajo" data-dias="0,6">Fin de semana</button>
+          </div>
+        </fieldset>
         <label>Título
           <input id="campo-alarma-titulo" type="text" placeholder="Despertar, reunión…" />
         </label>

@@ -398,6 +398,13 @@ input:focus { outline: none; border-color: var(--azul); }
   -webkit-overflow-scrolling: touch;
 }
 .lista-alarmas > .tenue, .lista-alarmas__vacia { padding: 0.5rem 0; font-size: 0.875rem; color: var(--texto-3); }
+.dias { margin: 0; padding: 0; border: 0; }
+.dias legend { padding: 0; margin-bottom: 0.4rem; font-size: 0.875rem; }
+.dias__fila { display: flex; gap: 0.35rem; }
+.dia { flex: 1 1 0; height: 2.4rem; padding: 0; border: 0; border-radius: 50%; background: var(--relleno); color: var(--texto); font-size: 0.9rem; font-weight: 600; }
+.dia[aria-pressed='true'] { background: var(--naranja); color: #1c1c1e; }
+.dias__atajos { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.dias__atajo { padding: 0.3rem 0.7rem; border: 0; border-radius: 0.9rem; background: none; color: #6cb6ff; font-size: 0.8125rem; font-weight: 600; }
 .alarmas__vacia { padding: 0.35rem 0; font-size: 0.875rem; color: var(--texto-3); }
 .alarmas__rapidas { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.6rem; }
 .alarmas__rapida { min-width: 4.2rem; height: 2.3rem; padding: 0 0.8rem; border: 0; border-radius: 1.15rem; background: var(--relleno); font-size: 0.95rem; font-weight: 600; color: var(--texto); font-variant-numeric: tabular-nums; }

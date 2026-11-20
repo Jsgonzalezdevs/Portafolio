@@ -18,6 +18,7 @@ import {
   alternar as alternarAlarma,
   cargarEstado as cargarAlarmasGuardadas,
   crear as crearAlarma,
+  textoDias,
   eliminar as eliminarAlarma,
   guardarEstado as guardarAlarmas,
   ordenadas,
@@ -637,7 +638,7 @@ function pintarAlarmas() {
     hora.textContent = a.hora;
     const tit = document.createElement('span');
     tit.className = 'alarma-item__titulo';
-    tit.textContent = a.titulo;
+    tit.textContent = `${a.titulo} · ${textoDias(a.dias)}`;
     izq.append(hora, tit);
 
     const acciones = document.createElement('div');
@@ -667,9 +668,36 @@ function pintarAlarmas() {
   actualizarAhora();
 }
 
+// Días de la nueva alarma (vacío = todos los días).
+let diasNuevaAlarma: number[] = [];
+function pintarDias() {
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#form-alarma .dia')) {
+    b.setAttribute('aria-pressed', String(diasNuevaAlarma.includes(Number(b.dataset.dia))));
+  }
+  $('alarma-dias-texto').textContent = `· ${textoDias(diasNuevaAlarma)}`;
+}
+$('form-alarma').addEventListener('click', (ev) => {
+  const t = ev.target as HTMLElement;
+  const dia = t.closest<HTMLButtonElement>('.dia');
+  if (dia) {
+    const n = Number(dia.dataset.dia);
+    diasNuevaAlarma = diasNuevaAlarma.includes(n) ? diasNuevaAlarma.filter((x) => x !== n) : [...diasNuevaAlarma, n];
+    if (diasNuevaAlarma.length === 7) diasNuevaAlarma = [];
+    pintarDias();
+  }
+  const atajo = t.closest<HTMLButtonElement>('.dias__atajo');
+  if (atajo) {
+    diasNuevaAlarma = atajo.dataset.dias ? atajo.dataset.dias.split(',').map(Number) : [];
+    pintarDias();
+  }
+});
+
 $('boton-nueva-alarma').addEventListener('click', () => {
-  $<HTMLInputElement>('campo-alarma-hora').value = '';
+  // Con una hora puesta: en el WebView de la tablet un campo de hora vacío parece roto.
+  $<HTMLInputElement>('campo-alarma-hora').value = '06:00';
   $<HTMLInputElement>('campo-alarma-titulo').value = '';
+  diasNuevaAlarma = [];
+  pintarDias();
   $('modal-alarma').hidden = false;
 });
 
@@ -683,9 +711,9 @@ $<HTMLFormElement>('form-alarma').addEventListener('submit', (ev) => {
   const titulo = $<HTMLInputElement>('campo-alarma-titulo').value.trim();
   if (!hora) return;
   try {
-    cambiarAlarmas(crearAlarma(estadoAlarmas, hora, titulo));
+    cambiarAlarmas(crearAlarma(estadoAlarmas, hora, titulo, diasNuevaAlarma));
     $('modal-alarma').hidden = true;
-    avisar('Alarma creada');
+    avisar(`Alarma a las ${hora} · ${textoDias(diasNuevaAlarma)}`);
   } catch (err) {
     avisar(err instanceof Error ? err.message : 'No se pudo crear la alarma', true);
   }
