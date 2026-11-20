@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatoTiempoPista, formatoTiempoTimer, saludoSegunHora } from './formato';
+import { formatoTiempoPista, formatoTiempoTimer, formatoTokens, saludoSegunHora } from './formato';
 
 describe('formato del nuevo dashboard', () => {
   it('saludoSegunHora devuelve saludo y periodo adecuados', () => {
@@ -50,5 +50,16 @@ describe('formato del nuevo dashboard', () => {
     expect(formatoTiempoPista(65)).toBe('1:05');
     expect(formatoTiempoPista(225)).toBe('3:45');
     expect(formatoTiempoPista(3600)).toBe('60:00');
+  });
+
+  it('formatoTokens formatea números de tokens a k y M con precisión amigable', () => {
+    expect(formatoTokens(0)).toBe('0');
+    expect(formatoTokens(-5)).toBe('0');
+    expect(formatoTokens(500)).toBe('500');
+    expect(formatoTokens(1000)).toBe('1.0k');
+    expect(formatoTokens(45200)).toBe('45k');
+    expect(formatoTokens(641390)).toBe('641k');
+    expect(formatoTokens(1000000)).toBe('1.0M');
+    expect(formatoTokens(41240086)).toBe('41M');
   });
 });

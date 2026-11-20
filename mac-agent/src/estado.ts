@@ -1,6 +1,7 @@
 import { existsSync, statfsSync } from 'node:fs';
 import os from 'node:os';
 import type { Ejecutor } from './ejecutor.ts';
+import { type ClaudeUso, GestorClaudeUso } from './claude_uso.ts';
 
 export interface Bateria {
   porcentaje: number;
@@ -46,6 +47,7 @@ export interface EstadoMac {
   reproductor?: Reproductor | null;
   dispositivoSalida?: string | null;
   clima?: Clima | null;
+  claudeUso?: ClaudeUso | null;
   momento: string;
 }
 
@@ -227,6 +229,8 @@ export class Monitor {
   private salidaAudio: { valor: string | null; en: number } = { valor: null, en: 0 };
   private clima: { valor: Clima | null; en: number } = { valor: null, en: 0 };
   private fondo: { valor: string | null; en: number } = { valor: null, en: 0 };
+  private gestorClaude = new GestorClaudeUso();
+  private claudeUso: { valor: ClaudeUso | null; en: number } = { valor: null, en: 0 };
   private readonly ejecutar: Ejecutor;
   private ciudad: string;
 
@@ -315,6 +319,16 @@ export class Monitor {
     return this.salidaAudio.valor;
   }
 
+  async leerClaudeUso(): Promise<ClaudeUso | null> {
+    if (Date.now() - this.claudeUso.en > 15_000) {
+      this.claudeUso = {
+        valor: await this.intentar(() => this.gestorClaude.leer(this.ejecutar), this.claudeUso.valor),
+        en: Date.now(),
+      };
+    }
+    return this.claudeUso.valor;
+  }
+
   async leer(): Promise<EstadoMac> {
     if (!this.sistema) {
       this.sistema = await this.intentar(
@@ -353,13 +367,14 @@ export class Monitor {
         en: Date.now(),
       };
     }
-    const [dispositivoSalida, memUsada, volumen] = await Promise.all([
+    const [dispositivoSalida, memUsada, volumen, claudeUso] = await Promise.all([
       this.leerDispositivoSalida(),
       this.intentar(async () => parsearVmStat(await this.ejecutar('vm_stat', [])), null),
       this.intentar(
         async () => parsearVolumen(await this.ejecutar('osascript', ['-e', 'get volume settings'])),
         null,
       ),
+      this.leerClaudeUso(),
     ]);
     const rep = this.reproductor.valor ? { ...this.reproductor.valor, dispositivoSalida } : null;
     const total = os.totalmem();
@@ -377,6 +392,7 @@ export class Monitor {
       reproductor: rep,
       dispositivoSalida,
       clima: this.clima.valor,
+      claudeUso,
       momento: new Date().toISOString(),
     };
   }

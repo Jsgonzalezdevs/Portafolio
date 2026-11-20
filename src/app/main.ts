@@ -35,7 +35,7 @@ import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './
 import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
 import { desplazamientoHora, nocheActiva } from './noche';
 import { claveDia, debeResumirManana, duracionAviso, efectosConocidos } from './rutinas';
-import { bytes, duracion, formatoTiempoPista, formatoTiempoTimer, porcentaje, saludoSegunHora } from './formato';
+import { bytes, duracion, formatoTiempoPista, formatoTiempoTimer, formatoTokens, porcentaje, saludoSegunHora } from './formato';
 
 export interface PlaylistRapida {
   id: string;
@@ -56,6 +56,20 @@ interface Reproductor {
   dispositivoSalida?: string | null;
 }
 
+interface ClaudeUso {
+  activo: boolean;
+  organizacion: string;
+  suscripcion: string;
+  email?: string;
+  modelo: string;
+  contextoUsado: number;
+  contextoLimite: number;
+  tokensRestantes: number;
+  porcentajeLibre: number;
+  tokensHoy: number;
+  actualizadoEn: string;
+}
+
 /** Lo que manda el mac-agent en /estado y en los eventos `estado`. */
 interface EstadoMac {
   nombre: string;
@@ -71,6 +85,7 @@ interface EstadoMac {
   reproductor?: Reproductor | null;
   dispositivoSalida?: string | null;
   clima?: Clima | null;
+  claudeUso?: ClaudeUso | null;
   /** Recordatorios que acaban de vencer. */
   avisos?: Aviso[];
   /** Firma del fondo de pantalla de la Mac: cuando cambia, se vuelve a descargar. */
@@ -853,6 +868,86 @@ function pintarEstado(e: EstadoMac) {
 
   // El fondo de la Mac cambió (p. ej. rotó el Aerial): volver a bajarlo.
   if (e.fondo && e.fondo !== firmaFondo && emparejamiento) void cargarFondo(emparejamiento, e.fondo);
+
+  pintarClaude(e.claudeUso);
+}
+
+function pintarClaude(c?: ClaudeUso | null) {
+  const tarjetaInicio = document.getElementById('tarjeta-claude');
+  const tarjetaMac = document.getElementById('tarjeta-claude-mac');
+
+  if (!c || !c.activo) {
+    if (tarjetaInicio) tarjetaInicio.hidden = true;
+    if (tarjetaMac) tarjetaMac.hidden = true;
+    return;
+  }
+
+  if (tarjetaInicio) tarjetaInicio.hidden = false;
+  if (tarjetaMac) tarjetaMac.hidden = false;
+
+  const pct = Math.max(0, Math.min(100, Math.round(c.porcentajeLibre)));
+  const nivel = pct <= 15 ? 'alerta' : pct <= 35 ? 'aviso' : 'ok';
+  const restantesStr = formatoTokens(c.tokensRestantes);
+  const usadosStr = formatoTokens(c.contextoUsado);
+  const limiteStr = formatoTokens(c.contextoLimite);
+  const hoyStr = formatoTokens(c.tokensHoy);
+  const badgeTexto = `${c.suscripcion} · ${c.organizacion}`;
+
+  // Actualizar tarjeta de Inicio
+  const modeloEl = document.getElementById('claude-modelo');
+  if (modeloEl) modeloEl.textContent = c.modelo;
+
+  const badgeEl = document.getElementById('claude-badge');
+  if (badgeEl) badgeEl.textContent = badgeTexto;
+
+  const pctEl = document.getElementById('claude-pct');
+  if (pctEl) {
+    pctEl.textContent = `${pct}%`;
+    pctEl.setAttribute('data-nivel', nivel);
+  }
+
+  const restEl = document.getElementById('claude-restantes');
+  if (restEl) restEl.textContent = restantesStr;
+
+  const barraEl = document.getElementById('claude-progreso');
+  if (barraEl) {
+    barraEl.style.width = `${pct}%`;
+    barraEl.setAttribute('data-nivel', nivel);
+  }
+
+  const ctxEl = document.getElementById('claude-ctx');
+  if (ctxEl) ctxEl.textContent = `${usadosStr} / ${limiteStr}`;
+
+  const hoyEl = document.getElementById('claude-hoy');
+  if (hoyEl) hoyEl.textContent = hoyStr;
+
+  // Actualizar tarjeta en Mac y Casa
+  const modeloMacEl = document.getElementById('claude-mac-modelo');
+  if (modeloMacEl) modeloMacEl.textContent = c.modelo;
+
+  const badgeMacEl = document.getElementById('claude-mac-badge');
+  if (badgeMacEl) badgeMacEl.textContent = badgeTexto;
+
+  const pctMacEl = document.getElementById('claude-mac-pct');
+  if (pctMacEl) {
+    pctMacEl.textContent = `${pct}%`;
+    pctMacEl.setAttribute('data-nivel', nivel);
+  }
+
+  const restMacEl = document.getElementById('claude-mac-restantes');
+  if (restMacEl) restMacEl.textContent = restantesStr;
+
+  const barraMacEl = document.getElementById('claude-mac-progreso');
+  if (barraMacEl) {
+    barraMacEl.style.width = `${pct}%`;
+    barraMacEl.setAttribute('data-nivel', nivel);
+  }
+
+  const ctxMacEl = document.getElementById('claude-mac-ctx');
+  if (ctxMacEl) ctxMacEl.textContent = `${usadosStr} / ${limiteStr}`;
+
+  const hoyMacEl = document.getElementById('claude-mac-hoy');
+  if (hoyMacEl) hoyMacEl.textContent = hoyStr;
 }
 
 const TEXTO_CONEXION: Record<EstadoConexion, string> = {

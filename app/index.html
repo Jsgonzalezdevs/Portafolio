@@ -72,6 +72,40 @@
               <p id="ahora-resumen" class="ahora__resumen">Cargando…</p>
             </section>
 
+            <section id="tarjeta-claude" class="tarjeta vidrio claude solo-mac" aria-labelledby="t-claude" hidden>
+              <div class="tarjeta__cabecera">
+                <div class="claude__titulo-grupo">
+                  <span class="claude__icono" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2L14.3 8.7L21 11L14.3 13.3L12 20L9.7 13.3L3 11L9.7 8.7L12 2Z"/></svg>
+                  </span>
+                  <h2 id="t-claude" class="claude__nombre">Claude</h2>
+                  <span id="claude-modelo" class="insignia insignia--modelo">Sonnet 5.5</span>
+                </div>
+                <div class="claude__insignias">
+                  <span id="claude-badge" class="insignia insignia--claude">Team · ALIMENNI</span>
+                </div>
+              </div>
+              <div class="claude__metricas">
+                <div class="claude__fila-principal">
+                  <div class="claude__porcentaje-caja">
+                    <span id="claude-pct" class="claude__pct">--%</span>
+                    <span class="claude__pct-etiqueta">libre</span>
+                  </div>
+                  <div class="claude__info-restante">
+                    <b id="claude-restantes" class="claude__restantes">--</b>
+                    <small class="tenue">tokens restantes</small>
+                  </div>
+                </div>
+                <div class="claude__barra-pista" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div id="claude-progreso" class="claude__barra-relleno"></div>
+                </div>
+                <div class="claude__detalles">
+                  <span class="claude__chip"><span class="tenue">Contexto:</span> <b id="claude-ctx">-- / --</b></span>
+                  <span class="claude__chip"><span class="tenue">Hoy:</span> <b id="claude-hoy">--</b></span>
+                </div>
+              </div>
+            </section>
+
             <section id="tarjeta-alarmas" class="tarjeta vidrio alarmas" aria-labelledby="t-alarmas">
               <div class="tarjeta__cabecera">
                 <h2 id="t-alarmas">Alarmas</h2>
@@ -201,6 +235,38 @@
             </section>
           </div>
           <div class="columna">
+            <section id="tarjeta-claude-mac" class="tarjeta vidrio claude claude--detalle solo-mac" aria-labelledby="t-claude-mac" hidden>
+              <div class="tarjeta__cabecera">
+                <div class="claude__titulo-grupo">
+                  <span class="claude__icono" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2L14.3 8.7L21 11L14.3 13.3L12 20L9.7 13.3L3 11L9.7 8.7L12 2Z"/></svg>
+                  </span>
+                  <h2 id="t-claude-mac" class="claude__nombre">Claude Code</h2>
+                  <span id="claude-mac-modelo" class="insignia insignia--modelo">Sonnet 5.5</span>
+                </div>
+                <span id="claude-mac-badge" class="insignia insignia--claude">Team · ALIMENNI</span>
+              </div>
+              <div class="claude__metricas">
+                <div class="claude__fila-principal">
+                  <div class="claude__porcentaje-caja">
+                    <span id="claude-mac-pct" class="claude__pct">--%</span>
+                    <span class="claude__pct-etiqueta">libre</span>
+                  </div>
+                  <div class="claude__info-restante">
+                    <b id="claude-mac-restantes" class="claude__restantes">--</b>
+                    <small class="tenue">tokens restantes</small>
+                  </div>
+                </div>
+                <div class="claude__barra-pista" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div id="claude-mac-progreso" class="claude__barra-relleno"></div>
+                </div>
+                <div class="claude__detalles">
+                  <span class="claude__chip"><span class="tenue">Contexto:</span> <b id="claude-mac-ctx">-- / --</b></span>
+                  <span class="claude__chip"><span class="tenue">Hoy:</span> <b id="claude-mac-hoy">--</b></span>
+                </div>
+              </div>
+            </section>
+
             <section id="tarjeta-escenas" class="tarjeta vidrio" aria-labelledby="t-escenas">
               <h2 id="t-escenas">Casa</h2>
               <div id="rutinas" class="rejilla" hidden></div>
