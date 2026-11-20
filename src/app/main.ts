@@ -779,12 +779,32 @@ const CIRCUNFERENCIA = 163.36; // 2 · π · 26, el radio de los anillos
 const COLOR = { azul: '#0a84ff', verde: '#30d158', naranja: '#ff9f0a', rojo: '#ff453a' };
 
 /** Pinta un anillo de actividad (CPU, memoria, disco, batería). */
+/**
+ * Escribir un texto igual al que ya hay también obliga a recalcular y redibujar la tarjeta. En la GPU de
+ * la tablet cada redibujo cuesta decenas de ms, y el estado de la Mac llega cada pocos segundos: solo se
+ * toca lo que cambió.
+ */
+function poner(el: Element | null, texto: string) {
+  if (el && el.textContent !== texto) el.textContent = texto;
+}
+
+/** Igual que poner(), para iconos SVG que se cambian enteros. */
+function ponerIcono(el: Element, html: string) {
+  if ((el as HTMLElement).dataset.icono === html) return;
+  (el as HTMLElement).dataset.icono = html;
+  el.innerHTML = html;
+}
+
 function anillo(id: string, pct: number, color: string) {
   const arco = document.querySelector<SVGCircleElement>(`#${id} .anillo__arco`);
   if (!arco) return;
   const limpio = Math.max(0, Math.min(100, pct));
-  arco.style.strokeDashoffset = String(CIRCUNFERENCIA * (1 - limpio / 100));
-  arco.style.stroke = color;
+  const offset = String(CIRCUNFERENCIA * (1 - limpio / 100));
+  if (arco.style.strokeDashoffset !== offset) arco.style.strokeDashoffset = offset;
+  if (arco.dataset.color !== color) {
+    arco.dataset.color = color;
+    arco.style.stroke = color;
+  }
 }
 
 /** Para lo que «cuanto menos mejor»: azul, y naranja/rojo cuando se aprieta. */
@@ -795,7 +815,8 @@ function pintarRango(input: HTMLInputElement) {
   const max = Number(input.max) || 100;
   const min = Number(input.min) || 0;
   const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
-  input.style.setProperty('--p', `${Math.max(0, Math.min(100, pct))}%`);
+  const valor = `${Math.max(0, Math.min(100, pct))}%`;
+  if (input.style.getPropertyValue('--p') !== valor) input.style.setProperty('--p', valor);
 }
 
 // Color de ambiente del reproductor: la carátula reducida a 8×8 y ampliada da manchas suaves.
@@ -835,23 +856,23 @@ const ICONO_PAUSA = '<path fill="currentColor" d="M7 5h3.6v14H7zm6.4 0H17v14h-3.
 
 function pintarEstado(e: EstadoMac) {
   ultimoEstadoMac = e;
-  $('mac-nombre').textContent = e.nombre;
-  $('mac-sistema').textContent = e.sistema;
+  poner($('mac-nombre'), e.nombre);
+  poner($('mac-sistema'), e.sistema);
 
   const cpu = Math.round(e.cpuPct);
-  $('cpu-valor').textContent = `${cpu}%`;
+  poner($('cpu-valor'), `${cpu}%`);
   anillo('anillo-cpu', cpu, colorCarga(cpu));
 
   const ram = porcentaje(e.memoria.usadaBytes, e.memoria.totalBytes);
-  $('ram-valor').textContent = `${ram}%`;
+  poner($('ram-valor'), `${ram}%`);
   anillo('anillo-ram', ram, colorCarga(ram));
-  $('ram-detalle').textContent = `${bytes(e.memoria.usadaBytes)} de ${bytes(e.memoria.totalBytes)}`;
+  poner($('ram-detalle'), `${bytes(e.memoria.usadaBytes)} de ${bytes(e.memoria.totalBytes)}`);
 
   if (e.disco) {
     const usado = porcentaje(e.disco.totalBytes - e.disco.libreBytes, e.disco.totalBytes);
-    $('disco-valor').textContent = `${usado}%`;
+    poner($('disco-valor'), `${usado}%`);
     anillo('anillo-disco', usado, colorCarga(usado));
-    $('disco-detalle').textContent = bytes(e.disco.libreBytes);
+    poner($('disco-detalle'), bytes(e.disco.libreBytes));
   }
 
   // Batería: anillo en «Mac y Casa» y pila en la barra de menús (solo si la Mac tiene).
@@ -859,23 +880,23 @@ function pintarEstado(e: EstadoMac) {
   if (e.bateria) {
     const pct = Math.max(0, Math.min(100, Math.round(e.bateria.porcentaje)));
     const enCarga = Boolean(e.bateria.cargando);
-    $('bateria-valor').textContent = `${pct}%`;
+    poner($('bateria-valor'), `${pct}%`);
     anillo('anillo-bateria', pct, enCarga ? COLOR.verde : pct <= 20 ? COLOR.rojo : pct <= 40 ? COLOR.naranja : COLOR.verde);
-    $('bateria').textContent = e.bateria.cargando ? 'Cargando' : e.bateria.conectada ? 'Enchufada' : 'Batería';
+    poner($('bateria'), e.bateria.cargando ? 'Cargando' : e.bateria.conectada ? 'Enchufada' : 'Batería');
     menuPila.hidden = false;
     const nivel = $('menubar-bateria-nivel');
     nivel.style.width = `${pct}%`;
     nivel.className = enCarga ? 'cargando' : pct <= 20 ? 'baja' : '';
-    $('menubar-bateria-valor').textContent = `${pct}%`;
+    poner($('menubar-bateria-valor'), `${pct}%`);
   } else {
-    $('bateria-valor').textContent = '100%';
+    poner($('bateria-valor'), '100%');
     anillo('anillo-bateria', 100, COLOR.verde);
-    $('bateria').textContent = 'Corriente';
+    poner($('bateria'), 'Corriente');
     menuPila.hidden = true;
   }
 
-  $('uptime').textContent = duracion(e.uptimeSeg);
-  $('carga').textContent = `${e.carga1m.toFixed(1)} / ${e.nucleos}`;
+  poner($('uptime'), duracion(e.uptimeSeg));
+  poner($('carga'), `${e.carga1m.toFixed(1)} / ${e.nucleos}`);
 
   // Clima: la tablet lo pide por su cuenta; aquí solo se aprende la ciudad de la Mac y se repinta.
   if (e.clima) recordarCiudad(e.clima.ciudad);
@@ -894,7 +915,7 @@ function pintarEstado(e: EstadoMac) {
   const salidaAudio = rep?.dispositivoSalida || e.dispositivoSalida;
   if (salidaAudio) {
     badgeDisp.hidden = false;
-    badgeDisp.textContent = salidaAudio;
+    poner(badgeDisp, salidaAudio);
     badgeDisp.title = `Dispositivo de salida: ${salidaAudio}`;
   } else {
     badgeDisp.hidden = true;
@@ -904,13 +925,13 @@ function pintarEstado(e: EstadoMac) {
     activo.hidden = false;
     reposo.hidden = true;
     badge.hidden = false;
-    badge.textContent = rep.app === 'spotify' ? 'Spotify' : 'Música';
-    $('media-titulo').textContent = rep.cancion;
-    $('media-artista').textContent = rep.artista;
+    poner(badge, rep.app === 'spotify' ? 'Spotify' : 'Música');
+    poner($('media-titulo'), rep.cancion);
+    poner($('media-artista'), rep.artista);
 
     if (rep.album) {
       albumEl.hidden = false;
-      albumEl.textContent = rep.album;
+      poner(albumEl, rep.album);
     } else {
       albumEl.hidden = true;
     }
@@ -923,7 +944,7 @@ function pintarEstado(e: EstadoMac) {
       caratula.hidden = true;
     }
     pintarAmbiente(rep.caratula);
-    iconoPlayPause.innerHTML = rep.estado === 'playing' ? ICONO_PAUSA : ICONO_PLAY;
+    ponerIcono(iconoPlayPause, rep.estado === 'playing' ? ICONO_PAUSA : ICONO_PLAY);
     $('boton-playpause').setAttribute('aria-label', rep.estado === 'playing' ? 'Pausar' : 'Reproducir');
 
     // Progreso y duración
@@ -935,10 +956,10 @@ function pintarEstado(e: EstadoMac) {
       if (!tocandoProgreso) {
         posicionLocalSeg = rep.posicionSeg ?? 0;
         slider.value = String(posicionLocalSeg);
-        $('media-tiempo-actual').textContent = formatoTiempoPista(posicionLocalSeg);
+        poner($('media-tiempo-actual'), formatoTiempoPista(posicionLocalSeg));
       }
       pintarRango(slider);
-      $('media-tiempo-total').textContent = formatoTiempoPista(duracionLocalSeg);
+      poner($('media-tiempo-total'), formatoTiempoPista(duracionLocalSeg));
     } else {
       progresoCaja.hidden = true;
     }
@@ -956,7 +977,7 @@ function pintarEstado(e: EstadoMac) {
     progresoCaja.hidden = true;
     pintarAmbiente(null);
     detenerTemporizadorProgreso();
-    iconoPlayPause.innerHTML = ICONO_PLAY;
+    ponerIcono(iconoPlayPause, ICONO_PLAY);
     $('boton-playpause').setAttribute('aria-label', 'Reproducir o pausar');
   }
 
@@ -968,7 +989,7 @@ function pintarEstado(e: EstadoMac) {
   rango.disabled = !e.volumen;
   if (e.volumen && !tocandoVolumen) {
     rango.value = String(e.volumen.nivel);
-    $('volumen-valor').textContent = String(e.volumen.nivel);
+    poner($('volumen-valor'), String(e.volumen.nivel));
     $('icono-vol').hidden = e.volumen.silenciado;
     $('icono-mute').hidden = !e.volumen.silenciado;
   }
@@ -1003,19 +1024,19 @@ function pintarClaude(c?: ClaudeUso | null) {
 
   // Actualizar tarjeta de Inicio
   const modeloEl = document.getElementById('claude-modelo');
-  if (modeloEl) modeloEl.textContent = c.modelo;
+  if (modeloEl) poner(modeloEl, c.modelo);
 
   const badgeEl = document.getElementById('claude-badge');
-  if (badgeEl) badgeEl.textContent = badgeTexto;
+  if (badgeEl) poner(badgeEl, badgeTexto);
 
   const pctEl = document.getElementById('claude-pct');
   if (pctEl) {
-    pctEl.textContent = `${pct}%`;
+    poner(pctEl, `${pct}%`);
     pctEl.setAttribute('data-nivel', nivel);
   }
 
   const restEl = document.getElementById('claude-restantes');
-  if (restEl) restEl.textContent = restantesStr;
+  if (restEl) poner(restEl, restantesStr);
 
   const barraEl = document.getElementById('claude-progreso');
   if (barraEl) {
@@ -1024,26 +1045,26 @@ function pintarClaude(c?: ClaudeUso | null) {
   }
 
   const ctxEl = document.getElementById('claude-ctx');
-  if (ctxEl) ctxEl.textContent = `${usadosStr} / ${limiteStr}`;
+  if (ctxEl) poner(ctxEl, `${usadosStr} / ${limiteStr}`);
 
   const hoyEl = document.getElementById('claude-hoy');
-  if (hoyEl) hoyEl.textContent = hoyStr;
+  if (hoyEl) poner(hoyEl, hoyStr);
 
   // Actualizar tarjeta en Mac y Casa
   const modeloMacEl = document.getElementById('claude-mac-modelo');
-  if (modeloMacEl) modeloMacEl.textContent = c.modelo;
+  if (modeloMacEl) poner(modeloMacEl, c.modelo);
 
   const badgeMacEl = document.getElementById('claude-mac-badge');
-  if (badgeMacEl) badgeMacEl.textContent = badgeTexto;
+  if (badgeMacEl) poner(badgeMacEl, badgeTexto);
 
   const pctMacEl = document.getElementById('claude-mac-pct');
   if (pctMacEl) {
-    pctMacEl.textContent = `${pct}%`;
+    poner(pctMacEl, `${pct}%`);
     pctMacEl.setAttribute('data-nivel', nivel);
   }
 
   const restMacEl = document.getElementById('claude-mac-restantes');
-  if (restMacEl) restMacEl.textContent = restantesStr;
+  if (restMacEl) poner(restMacEl, restantesStr);
 
   const barraMacEl = document.getElementById('claude-mac-progreso');
   if (barraMacEl) {
@@ -1052,10 +1073,10 @@ function pintarClaude(c?: ClaudeUso | null) {
   }
 
   const ctxMacEl = document.getElementById('claude-mac-ctx');
-  if (ctxMacEl) ctxMacEl.textContent = `${usadosStr} / ${limiteStr}`;
+  if (ctxMacEl) poner(ctxMacEl, `${usadosStr} / ${limiteStr}`);
 
   const hoyMacEl = document.getElementById('claude-mac-hoy');
-  if (hoyMacEl) hoyMacEl.textContent = hoyStr;
+  if (hoyMacEl) poner(hoyMacEl, hoyStr);
 }
 
 const TEXTO_CONEXION: Record<EstadoConexion, string> = {
