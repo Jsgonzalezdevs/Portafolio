@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lo primero que se ve al abrir la app (antes de que cargue nada): el mismo degradado oscuro del panel. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="315"
+        android:startColor="#1b2d50"
+        android:centerColor="#0f1730"
+        android:endColor="#080a12" />
+</shape>

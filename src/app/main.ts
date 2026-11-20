@@ -106,6 +106,12 @@ interface Catalogo {
 
 const $ = <T extends Element = HTMLElement>(id: string) => document.getElementById(id) as unknown as T;
 
+// Tablet de 1 GB: nada de animaciones. Cada fotograma de un fundido cuesta ~80 ms en su GPU y se siente a tirones;
+// sin ellas, cambiar de pestaña es un solo fotograma. (Navegadores normales, con más memoria, las conservan.)
+if (puenteNativo() || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 1) {
+  document.documentElement.classList.add('ligero');
+}
+
 let emparejamiento: Emparejamiento | null = null;
 let cerrarFlujo: (() => void) | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
@@ -305,6 +311,8 @@ function aplicarNoche() {
   nocheAplicada = activa;
   document.body.classList.toggle('noche-activa', activa);
   puenteNativo()?.brillo?.(activa);
+  // La app bajó una versión nueva del panel: de noche nadie lo usa, es el momento de estrenarla.
+  if (activa && puenteNativo()?.webNueva?.()) window.setTimeout(() => puenteNativo()?.recargar?.(), 5_000);
   ritmoEstado(activa);
   if (!activa) pedirAlineacion();
 }
@@ -345,6 +353,8 @@ function recordarCiudad(ciudad: string) {
 async function refrescarClima() {
   const ciudad = ciudadDelClima();
   if (!ciudad) return;
+  // Con una lectura de hace menos de 10 min no hace falta volver a pedirla (cada sitio nuevo cuesta un apretón de manos TLS).
+  if (climaTablet && Date.now() - climaTablet.en < 10 * 60_000) return;
   try {
     const c = await obtenerClima(ciudad);
     climaTablet = { valor: c, en: Date.now() };
@@ -1800,7 +1810,8 @@ async function arrancar() {
   actualizarAvisoSonido();
   evaluarAlarmas();
   pintarClima();
-  void refrescarClima();
+  // El clima propio no tiene prisa: primero el panel, y a los 20 s se pide si hace falta.
+  window.setTimeout(() => void refrescarClima(), 20_000);
   const desdeHash = emparejamientoDesdeHash(location.hash);
   if (desdeHash) history.replaceState(null, '', location.pathname); // el token no se queda en la barra ni en el historial
   const guardado = desdeHash ?? cargarEmparejamiento();

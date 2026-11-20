@@ -45,6 +45,9 @@ class Voz(private val contexto: Context, private val emitir: (JSONObject) -> Uni
     private var reconocedor: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsListo = false
+    /** Lo que se pidió decir mientras la voz de Google aún arrancaba (la primera vez tarda varios segundos en esta tablet). */
+    private var pendiente: Pair<String, Boolean>? = null
+    private val calentarTts = Runnable { if (activa && tts == null) prepararTts() }
     private var escucharTrasHablar = false
     private val tono by lazy { ToneGenerator(AudioManager.STREAM_MUSIC, 70) }
 
@@ -53,26 +56,35 @@ class Voz(private val contexto: Context, private val emitir: (JSONObject) -> Uni
         if (fase == Fase.ESPERANDO_RESPUESTA) vigilar()
     }
 
+    /** Preguntarlo al sistema tarda más de 1 s en esta tablet: se hace una vez. */
+    private val reconocimientoDisponible: Boolean by lazy { SpeechRecognizer.isRecognitionAvailable(contexto) }
+
     val estado: JSONObject
         get() = JSONObject()
             .put("palabraClave", porcupine != null)
             .put("palabra", nombrePalabra())
             .put("error", errorPalabra ?: JSONObject.NULL)
-            .put("reconocimiento", SpeechRecognizer.isRecognitionAvailable(contexto))
+            .put("reconocimiento", reconocimientoDisponible)
             .put("fase", fase.name.lowercase())
 
     fun iniciar() {
         if (activa) return
         activa = true
-        if (tts == null) prepararTts()
+        Tiempos.marca("voz: iniciar empieza")
+        // La voz de Google (TextToSpeech) cuesta ~1 s de arranque y 1 GB de RAM no sobra: no se pide al abrir la app
+        // sino cuando hay algo que decir, o un rato después, cuando ya no estorba al panel.
+        principal.removeCallbacks(calentarTts)
+        principal.postDelayed(calentarTts, 25_000)
         if (porcupine == null) crearPorcupine()
         vigilar()
         emitir(evento("estado-voz").put("estado", estado))
+        Tiempos.marca("voz: iniciar termina")
     }
 
     fun detener() {
         activa = false
         principal.removeCallbacks(rescate)
+        principal.removeCallbacks(calentarTts)
         detenerPorcupine()
         reconocedor?.cancel()
         tts?.stop()
@@ -259,10 +271,16 @@ class Voz(private val contexto: Context, private val emitir: (JSONObject) -> Uni
 
     private fun prepararTts() {
         tts = TextToSpeech(contexto) { estado ->
+            Tiempos.marca("voz: TTS responde (estado $estado)")
             val motor = tts ?: return@TextToSpeech
             if (estado != TextToSpeech.SUCCESS) return@TextToSpeech
             val idiomas = listOf("es-CO", "es-US", "es-MX", "es-ES", "es").map(Locale::forLanguageTag)
             ttsListo = idiomas.any { motor.setLanguage(it) >= TextToSpeech.LANG_AVAILABLE }
+            Tiempos.marca("voz: TTS idioma listo=$ttsListo")
+            pendiente?.let { (texto, escuchar) ->
+                pendiente = null
+                principal.post { hablar(texto, escuchar) }
+            }
             if (!ttsListo) emitir(evento("error").put("mensaje", "No hay voz en español: instálala en Ajustes › Idioma › Texto a voz."))
             motor.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {}
@@ -284,7 +302,22 @@ class Voz(private val contexto: Context, private val emitir: (JSONObject) -> Uni
         principal.removeCallbacks(rescate)
         escucharTrasHablar = escucharDespues
         val motor = tts
-        if (motor == null || !ttsListo || texto.isBlank()) return terminoDeHablar()
+        if (motor == null) {
+            // Primera vez: se arranca la voz y se dice en cuanto esté lista.
+            if (texto.isNotBlank()) {
+                pendiente = texto to escucharDespues
+                prepararTts()
+            } else {
+                terminoDeHablar()
+            }
+            return
+        }
+        if (!ttsListo) {
+            // Todavía arrancando: se guarda lo último que se pidió.
+            if (texto.isNotBlank()) pendiente = texto to escucharDespues else terminoDeHablar()
+            return
+        }
+        if (texto.isBlank()) return terminoDeHablar()
         detenerPorcupine()
         reconocedor?.cancel()
         fase = Fase.HABLANDO

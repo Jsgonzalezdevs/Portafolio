@@ -47,6 +47,10 @@ interface PuenteNativo {
   brillo?(noche: boolean): void;
   /** Batería de la tablet como JSON: { nivel, cargando, enchufada, temperaturaC }. */
   bateria?(): string;
+  /** La app bajó una versión nueva del panel que aún no se está usando. */
+  webNueva?(): boolean;
+  /** Recarga el panel para estrenar esa versión (se pide de noche, cuando nadie lo usa). */
+  recargar?(): void;
 }
 
 interface EventoNativo {

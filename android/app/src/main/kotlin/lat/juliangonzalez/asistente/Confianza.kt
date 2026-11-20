@@ -69,6 +69,14 @@ class Confianza(private val contexto: Context) {
         }
     }
 
+    /** Una conexión https que valida con nuestras raíces (para bajar cosas desde la propia app, no desde el WebView). */
+    fun abrir(url: String): HttpsURLConnection =
+        (URL(url).openConnection() as HttpsURLConnection).apply {
+            sslSocketFactory = ssl.socketFactory
+            connectTimeout = TIEMPO_MS
+            readTimeout = TIEMPO_MS
+        }
+
     /** El certificado del WebView en DER (`SslCertificate.getX509Certificate` solo existe desde Android 10). */
     private fun derDe(c: SslCertificate): ByteArray? = SslCertificate.saveState(c)?.getByteArray("x509-certificate")
 

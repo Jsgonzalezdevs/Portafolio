@@ -986,6 +986,10 @@ input:focus { outline: none; border-color: var(--azul); }
 
 #boton-ajustes.presionado { background: var(--rojo); color: #fff; }
 
+/* ---------- Tablet de poca memoria ---------- */
+/* Sin fundidos ni transiciones: en la tablet cada fotograma cuesta ~80 ms y la animación se ve a tirones. */
+.ligero *, .ligero *::before, .ligero *::after { animation: none !important; transition: none !important; }
+
 /* ---------- Con la Mac fuera ---------- */
 /* Lo que solo la Mac puede hacer (música, apps, pantalla…) se ve apagado y no responde al toque. */
 .mac-fuera .solo-mac { opacity: 0.4; pointer-events: none; }

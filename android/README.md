@@ -27,6 +27,7 @@ escucha la respuesta directamente, sin esperar la palabra clave.
 Necesita JDK 17 y el SDK de Android (están en esta Mac):
 
 ```bash
+zsh android/scripts/web.sh        # compila el panel y lo mete en el APK (ver «Rápida» abajo)
 cd android
 JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew assembleDebug
 ```
@@ -84,6 +85,39 @@ En **Voz**, elige «Personalizada».
 
 Sin AccessKey todo funciona igual, pero se habla tocando el botón de
 micrófono del chat.
+
+## Rápida: el panel viaja dentro del APK
+
+La YT3-850F (Snapdragon 210, 1 GB de RAM, Android 6) es lenta. Medido en la tablet real (`adb logcat -s Arranque`),
+lo que más pesaba era el arranque y, dentro de él, pedir la página a internet (DNS, conexión, TLS y la
+verificación de certificado de arriba: 4-5 s solo para recibir 100 KB).
+
+- **`PanelLocal`**: la página `/app` y sus 3 archivos (JS, CSS, favicon; ~140 KB) van dentro del APK y se sirven desde
+  `shouldInterceptRequest`, sin red. La página sigue siendo `https://www.juliangonzalez.lat/app` (mismo origen,
+  mismo localStorage, mismo CORS con la Mac). Abre aunque no haya internet.
+- **`ActualizadorWeb`**: 1 minuto después de abrir (y cada 6 h) pide `/app` al sitio con nuestras raíces; si cambió, baja
+  los archivos nuevos (la página al final) a `filesDir/web`, que tiene prioridad sobre el APK. Si algo falla o la
+  página no parece el panel, no toca nada. La versión nueva se estrena en el siguiente arranque o de noche (el panel
+  llama a `AndroidAsistente.recargar()` al entrar en modo noche). Al instalar un APK nuevo se descarta lo bajado.
+- **Hay que correr `scripts/web.sh` antes de compilar** (compila el panel y lo copia a `app/src/main/assets/web`, que no se
+  sube a git). Sin eso la app sigue funcionando pero pide la página a internet.
+- **Voz perezosa**: el motor de voz de Google ya no se arranca al abrir (costaba ~1 s de hilo principal): se pide al decir
+  algo por primera vez o 25 s después de abrir. Sin AccessKey de Picovoice no hay palabra clave, así que no hay nada que vigilar.
+- **Modo ligero** (`html.ligero`, en la app o con ≤ 1 GB): sin fundidos ni transiciones. En la tablet cada fotograma
+  cuesta ~80 ms; sin animaciones, cambiar de pestaña pasa de ~100 fotogramas a ~40.
+
+Resultado (arranque en frío, `am start` → panel a la vista): de ~9-10 s a ~3 s con el sistema caliente (~9 s justo tras encender
+la tablet o instalar, por el WebView y el caché de archivos fríos).
+
+### Lo que no se arregla desde la app
+
+Con la tablet en reposo, **la app de Google (`googlequicksearchbox:search`) gasta 30-38 % de CPU y ~110 MB** (es el
+servicio de asistente / «Ok Google» en segundo plano) y el sistema está en estado de memoria «crítico» (zRAM
+casi llena, `kswapd` trabajando). Detenerla (`adb shell am force-stop com.google.android.googlequicksearchbox`) baja el
+arranque del WebView de 3,9 s a 2,2 s, pero vuelve sola. Para quitarla de verdad, en la tablet:
+Ajustes › Apps › (engranaje) › **Asistente y entrada de voz › Asistente › Ninguno**, y en la app Google: Ajustes › Voz ›
+«Ok Google» › desactivar. El reconocimiento de voz del botón de micrófono sigue funcionando (es otro servicio de la
+misma app). También ayuda quitar apps que no se usan (Fotos, Vídeos, antivirus…).
 
 ## Emparejar la tablet desde la Mac por cable
 

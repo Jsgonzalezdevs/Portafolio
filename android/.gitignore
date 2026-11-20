@@ -8,3 +8,6 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+
+# El panel compilado se genera con scripts/web.sh y se mete en el APK
+app/src/main/assets/web/

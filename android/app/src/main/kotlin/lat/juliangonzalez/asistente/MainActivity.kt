@@ -24,6 +24,7 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebSettings
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject
@@ -53,13 +54,41 @@ class MainActivity : Activity() {
     private val confianza by lazy { Confianza(this) }
     private val verificador = Executors.newSingleThreadExecutor()
 
+    /** El panel sale de dentro de la app (ver PanelLocal) y se mantiene al día en segundo plano (ActualizadorWeb). */
+    private val panelLocal by lazy { PanelLocal(this) }
+    private val actualizador by lazy { ActualizadorWeb(this, confianza) }
+    private val tareaWeb = Executors.newSingleThreadExecutor()
+    @Volatile private var webNueva = false
+    private var revisionProgramada = false
+
+    private val revisarWeb = object : Runnable {
+        override fun run() {
+            val host = origenHost()
+            if (host != null) {
+                tareaWeb.execute {
+                    val bajo = try {
+                        actualizador.comprobar(host)
+                    } catch (e: Exception) {
+                        Log.w("ActualizadorWeb", "Revisión fallida: ${e.message}")
+                        false
+                    }
+                    // Se aplica en el siguiente arranque o cuando el panel pida recargar (de noche, ver recargar()).
+                    if (bajo) webNueva = true
+                }
+            }
+            principal.postDelayed(this, SEIS_HORAS_MS)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
     override fun onCreate(estado: Bundle?) {
+        Tiempos.marca("onCreate empieza")
         super.onCreate(estado)
         prefs = Preferencias(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) WebView.setWebContentsDebuggingEnabled(true)
+        Tiempos.marca("creando el WebView")
         web = WebView(this).apply {
             setBackgroundColor(Color.parseColor("#0b0d12"))
             settings.javaScriptEnabled = true
@@ -72,10 +101,13 @@ class MainActivity : Activity() {
             webViewClient = Cliente()
             addJavascriptInterface(Puente(), "AndroidAsistente")
         }
+        Tiempos.marca("WebView creado")
         setContentView(web)
+        pantallaCompleta()
 
         voz = Voz(this) { evento -> enviarALaWeb(evento) }
         cargar()
+        Tiempos.marca("onCreate termina")
     }
 
     private fun cargar() {
@@ -86,6 +118,7 @@ class MainActivity : Activity() {
     }
 
     override fun onResume() {
+        Tiempos.marca("onResume empieza")
         super.onResume()
         pantallaCompleta()
         ultimaClaveBateria = null
@@ -93,6 +126,7 @@ class MainActivity : Activity() {
         // Ajustes pudo cambiar la URL o la palabra clave.
         if (prefs.url != urlCargada) cargar()
         if (tienePermisoMicro()) voz.iniciar() else pedirPermisoMicro()
+        Tiempos.marca("onResume termina")
     }
 
     override fun onPause() {
@@ -107,6 +141,8 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         voz.liberar()
         verificador.shutdownNow()
+        tareaWeb.shutdownNow()
+        principal.removeCallbacks(revisarWeb)
         web.destroy()
         super.onDestroy()
     }
@@ -171,6 +207,17 @@ class MainActivity : Activity() {
         @JavascriptInterface fun brillo(noche: Boolean) { principal.post { aplicarBrillo(noche) } }
 
         @JavascriptInterface fun bateria(): String = leerBateria().toString()
+
+        /** ¿Se bajó una versión nueva del panel que aún no se está usando? */
+        @JavascriptInterface fun webNueva(): Boolean = webNueva
+
+        /** Recarga el panel para estrenar la versión nueva (el panel lo pide de noche, cuando nadie lo usa). */
+        @JavascriptInterface fun recargar() {
+            principal.post {
+                webNueva = false
+                web.reload()
+            }
+        }
     }
 
     /**
@@ -240,6 +287,27 @@ class MainActivity : Activity() {
         override fun shouldOverrideUrlLoading(vista: WebView, url: String): Boolean =
             shouldOverrideUrlLoading(vista, SimplePeticion(Uri.parse(url)))
 
+        override fun onPageStarted(vista: WebView, url: String, icono: android.graphics.Bitmap?) {
+            Tiempos.marca("página empieza: $url")
+        }
+
+        override fun onPageCommitVisible(vista: WebView, url: String) {
+            Tiempos.marca("página visible (primer pintado)")
+        }
+
+        override fun onPageFinished(vista: WebView, url: String) {
+            Tiempos.marca("página terminada")
+            // Con el panel ya a la vista (y el sistema respirando) se mira si hay una versión nueva.
+            if (!revisionProgramada) {
+                revisionProgramada = true
+                principal.postDelayed(revisarWeb, 60_000)
+            }
+        }
+
+        /** La página, su JS y su CSS salen de la propia app: sin red, sin TLS, sin esperar. */
+        override fun shouldInterceptRequest(vista: WebView, peticion: WebResourceRequest): WebResourceResponse? =
+            panelLocal.responder(peticion, origenHost())
+
         override fun onReceivedError(vista: WebView, peticion: WebResourceRequest, error: WebResourceError) {
             if (peticion.isForMainFrame) sinConexion(error.description?.toString() ?: "")
         }
@@ -289,6 +357,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val SEIS_HORAS_MS = 6 * 60 * 60 * 1000L
         private const val PERMISO_MICRO = 1
         private const val AJUSTES = 2
     }
