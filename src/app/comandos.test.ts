@@ -139,3 +139,14 @@ describe('respuestas de consulta', () => {
     expect(responderConsulta({ tipo: 'alarmas' }, { ...datos, alarmas: [] })).toBe('No tienes alarmas activas.');
   });
 });
+
+describe('agenda sin la Mac', () => {
+  it.each(['¿Qué tengo hoy?', 'qué tengo para hoy', 'Mi agenda', 'qué sigue', '¿Cuál es mi próximo evento?', 'qué hay en mi calendario hoy', 'qué tengo que hacer hoy'])(
+    '«%s» es la agenda',
+    (frase) => expect(interpretar(frase, AHORA)).toEqual({ tipo: 'agenda' }),
+  );
+  it('no se queda con preguntas más largas', () => {
+    expect(interpretar('qué tengo que llevar a la reunión', AHORA)).toBeNull();
+    expect(interpretar('mi agenda de la otra semana', AHORA)).toBeNull();
+  });
+});

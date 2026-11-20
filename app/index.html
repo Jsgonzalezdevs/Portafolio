@@ -59,7 +59,7 @@
       </header>
 
       <div id="panel-paginas" class="paginas">
-        <!-- INICIO: reloj sobre el fondo, resumen, alarmas, música y controles -->
+        <!-- INICIO: reloj, resumen, Claude y el día; música, alarmas y controles de la Mac -->
         <section class="pagina pagina--inicio pagina--activa" data-pagina="inicio" data-titulo="Inicio">
           <div class="columna">
             <div class="reloj">
@@ -106,14 +106,17 @@
               </div>
             </section>
 
-            <section id="tarjeta-alarmas" class="tarjeta vidrio alarmas" aria-labelledby="t-alarmas">
+            <section id="tarjeta-hoy" class="tarjeta vidrio hoy" aria-labelledby="t-hoy">
               <div class="tarjeta__cabecera">
-                <h2 id="t-alarmas">Alarmas</h2>
-                <button id="boton-nueva-alarma" class="boton-redondo" type="button" aria-label="Nueva alarma"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+                <h2 id="t-hoy">Hoy</h2>
+                <button id="hoy-ver-agenda" class="hoy__ver" type="button">Agenda ›</button>
               </div>
-              <ul id="lista-alarmas" class="lista-alarmas">
-                <li class="lista-alarmas__vacia">Sin alarmas</li>
-              </ul>
+              <div id="hoy-actual" class="hoy__actual" hidden>
+                <div class="hoy__fila"><span class="hoy__etiqueta">Ahora</span><span id="hoy-actual-resto" class="hoy__resto"></span></div>
+                <p id="hoy-actual-titulo" class="hoy__titulo"></p>
+                <div class="hoy__barra" aria-hidden="true"><i id="hoy-actual-avance"></i></div>
+              </div>
+              <ul id="hoy-proximos" class="hoy__proximos"></ul>
             </section>
           </div>
 
@@ -169,15 +172,20 @@
               </div>
             </section>
 
-            <section class="tarjeta vidrio accesos solo-mac" aria-label="Controles de la Mac">
-              <button class="acceso" type="button" data-accion="pantalla.apagar">
-                <span class="acceso__icono"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6.2l.6 2H16v1.5H8V19h1.6l.6-2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
-                <span class="acceso__texto">Apagar pantalla</span>
-              </button>
-              <button class="acceso" type="button" data-accion="mac.bloquear">
-                <span class="acceso__icono"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.8a4.5 4.5 0 0 1 9 0V10h.5a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 7 10zm2 0h5V7.8a2.5 2.5 0 0 0-5 0z"/></svg></span>
-                <span class="acceso__texto">Bloquear Mac</span>
-              </button>
+
+            <section id="tarjeta-alarmas" class="tarjeta vidrio alarmas" aria-labelledby="t-alarmas">
+              <div class="tarjeta__cabecera">
+                <h2 id="t-alarmas">Alarmas</h2>
+                <span id="alarmas-proxima" class="alarmas__proxima" hidden></span>
+                <button id="boton-nueva-alarma" class="boton-redondo" type="button" aria-label="Nueva alarma"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+              </div>
+              <ul id="lista-alarmas" class="lista-alarmas">
+                <li class="lista-alarmas__vacia">Sin alarmas</li>
+              </ul>
+            </section>
+            <section class="tarjeta vidrio controles solo-mac" aria-label="Controles de la Mac">
+              <button class="hoy__control" type="button" data-accion="pantalla.apagar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6.2l.6 2H16v1.5H8V19h1.6l.6-2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Apagar pantalla</button>
+              <button class="hoy__control" type="button" data-accion="mac.bloquear"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.8a4.5 4.5 0 0 1 9 0V10h.5a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 7 10zm2 0h5V7.8a2.5 2.5 0 0 0-5 0z"/></svg>Bloquear Mac</button>
             </section>
           </div>
         </section>
@@ -190,7 +198,7 @@
               <button id="chat-nueva" class="boton boton--chico" type="button">Nueva charla</button>
             </div>
             <ol id="chat-historial" class="chat__historial" aria-live="polite">
-              <li class="chat__vacio tenue">Pregúntame algo o pídeme que controle la Mac.</li>
+              
             </ol>
             <div id="chat-confirmar" class="fila" hidden>
               <button class="boton boton--primario" type="button" data-respuesta="Sí, hazlo.">Sí</button>

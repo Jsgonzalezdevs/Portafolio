@@ -13,6 +13,7 @@ export type Comando =
   | { tipo: 'fecha' }
   | { tipo: 'clima' }
   | { tipo: 'alarmas' }
+  | { tipo: 'agenda' }
   | { tipo: 'temporizador'; segundos: number }
   | { tipo: 'cancelar-temporizador' }
   | { tipo: 'restante-temporizador' }
@@ -201,6 +202,8 @@ const HORA = /^(?:que )?hora (?:es|son)(?: ahora| ya| en este momento)?$|^que ho
 const FECHA = /^(?:que )?(?:dia|fecha) (?:es|estamos)(?: hoy)?$|^en que dia (?:estamos|vivimos)$|^a cuanto estamos$|^dime (?:la fecha|el dia)$|^la fecha$|^fecha de hoy$|^que dia es$/;
 const CLIMA = /^(?:como|que tal) (?:esta|va) el (?:clima|tiempo)(?: hoy| ahora)?$|^que (?:clima|tiempo|temperatura) hace(?: hoy| ahora)?$|^(?:el )?(?:clima|tiempo|temperatura)$|^cuantos grados hace(?: hoy| ahora)?$|^como esta el dia$/;
 const ALARMAS = /^(?:que|cuales) alarmas (?:tengo|hay)(?: puestas| activas)?$|^mis alarmas$|^(?:a que hora|cuando) (?:suena|sonara) (?:mi|la) (?:proxima )?alarma$|^cuando es mi proxima alarma$|^que alarma sigue$/;
+const AGENDA =
+  /^(?:que|cual) (?:tengo|hay|me toca|sigue|viene)(?: (?:para )?(?:hoy|ahora|despues|luego))?$|^(?:que hay|que tengo) (?:en|para) (?:mi )?(?:agenda|calendario)(?: hoy| de hoy)?$|^(?:mi )?(?:agenda|calendario)(?: de hoy| para hoy)?$|^(?:cual es )?mi (?:proximo|siguiente) (?:evento|compromiso|pendiente)$|^que tengo que hacer(?: hoy| ahora)?$/;
 const CANCELAR = /^(?:cancela|cancelar|para|parar|deten|detener|quita|quitar|apaga|apagar|elimina|borra) (?:el |mi |ese )?(?:temporizador|timer|cuenta regresiva)$/;
 const RESTANTE = /^cuanto (?:falta|queda)(?: en| para| del| de)?(?: el| mi)? (?:temporizador|timer|cuenta regresiva)$|^cuanto le queda al (?:temporizador|timer)$/;
 const TEMPORIZADOR =
@@ -218,6 +221,7 @@ export function interpretar(texto: string, ahora: Date = new Date()): Comando | 
   if (FECHA.test(frase)) return { tipo: 'fecha' };
   if (CLIMA.test(frase)) return { tipo: 'clima' };
   if (ALARMAS.test(frase)) return { tipo: 'alarmas' };
+  if (AGENDA.test(frase)) return { tipo: 'agenda' };
   if (CANCELAR.test(frase)) return { tipo: 'cancelar-temporizador' };
   if (RESTANTE.test(frase)) return { tipo: 'restante-temporizador' };
 

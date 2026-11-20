@@ -387,6 +387,7 @@ input:focus { outline: none; border-color: var(--azul); }
 
 .alarmas { flex: 1 1 auto; min-height: 5.5rem; display: flex; flex-direction: column; }
 .alarmas .tarjeta__cabecera { margin-bottom: 0.15rem; }
+.alarmas__proxima { margin-right: auto; margin-left: 0.6rem; font-size: 0.75rem; color: var(--naranja); font-variant-numeric: tabular-nums; }
 .lista-alarmas {
   flex: 1 1 auto;
   min-height: 0;
@@ -397,6 +398,10 @@ input:focus { outline: none; border-color: var(--azul); }
   -webkit-overflow-scrolling: touch;
 }
 .lista-alarmas > .tenue, .lista-alarmas__vacia { padding: 0.5rem 0; font-size: 0.875rem; color: var(--texto-3); }
+.alarmas__vacia { padding: 0.35rem 0; font-size: 0.875rem; color: var(--texto-3); }
+.alarmas__rapidas { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.6rem; }
+.alarmas__rapida { min-width: 4.2rem; height: 2.3rem; padding: 0 0.8rem; border: 0; border-radius: 1.15rem; background: var(--relleno); font-size: 0.95rem; font-weight: 600; color: var(--texto); font-variant-numeric: tabular-nums; }
+.alarmas__rapida:active { background: rgba(255, 159, 10, 0.45); }
 .alarma-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-top: 1px solid var(--linea); }
 .alarma-item:first-child { border-top: 0; }
 .alarma-item__izq { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 0.6rem; }
@@ -714,43 +719,29 @@ input:focus { outline: none; border-color: var(--azul); }
 .chip-playlist:active { background: rgba(255, 255, 255, 0.28); }
 .chip-playlist__icono { font-size: 0.85rem; }
 
-/* Accesos rápidos, como los módulos del Centro de control. */
-.accesos {
-  flex: 1 1 auto;
-  min-height: 4.6rem;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  padding: 0.6rem;
-}
-.acceso {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.55rem;
-  text-align: center;
-  min-width: 0;
-  padding: 0.65rem 0.8rem;
-  border: 0;
-  border-radius: 0.85rem;
-  background: var(--relleno);
-  text-align: left;
-}
-.acceso:active { background: rgba(120, 120, 128, 0.5); }
-.acceso:disabled { opacity: 0.5; }
-.acceso__icono {
-  width: 2.2rem;
-  height: 2.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-}
-.acceso__icono svg { width: 1.25rem; height: 1.25rem; }
-.acceso__texto { font-size: 0.85rem; font-weight: 600; }
-.acceso__icono { width: 2.6rem; height: 2.6rem; }
+/* «Hoy»: lo que está pasando y lo que sigue. */
+.hoy { flex: 1 1 auto; min-height: 8rem; display: flex; flex-direction: column; }
+.hoy .tarjeta__cabecera { margin-bottom: 0.35rem; }
+.hoy__ver { padding: 0.2rem 0.1rem; border: 0; background: none; font-size: 0.8125rem; font-weight: 600; color: #6cb6ff; }
+.hoy__actual { flex: 0 0 auto; margin-bottom: 0.45rem; padding: 0.55rem 0.75rem 0.6rem; border-radius: 0.7rem; background: rgba(10, 132, 255, 0.2); box-shadow: inset 0.2rem 0 0 var(--azul); }
+.hoy__fila { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.hoy__etiqueta { font-size: 0.6875rem; font-weight: 700; color: #6cb6ff; text-transform: uppercase; letter-spacing: 0.06em; }
+.hoy__resto { font-size: 0.75rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.hoy__titulo { margin-top: 0.15rem; font-size: 1rem; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hoy__barra { height: 0.25rem; margin-top: 0.45rem; border-radius: 0.2rem; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.hoy__barra i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--azul); }
+.hoy__proximos { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.hoy__proximos li { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.32rem 0; border-top: 1px solid var(--linea); font-size: 0.9rem; }
+.hoy__proximos li:first-child { border-top: 0; }
+.hoy__proximos time { flex: 0 0 2.9rem; font-size: 0.8rem; font-weight: 600; color: #6cb6ff; font-variant-numeric: tabular-nums; }
+.hoy__proximos .hoy__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hoy__proximos .hoy__cuando { flex: 0 0 auto; font-size: 0.75rem; color: var(--texto-2); }
+.hoy__proximos .hoy__manana time { color: var(--texto-2); }
+.hoy__proximos .vacio { color: var(--texto-3); }
+.controles { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.5rem; }
+.hoy__control { display: flex; align-items: center; justify-content: center; gap: 0.45rem; height: 2.5rem; padding: 0 0.6rem; border: 0; border-radius: 0.7rem; background: var(--relleno); font-size: 0.8125rem; font-weight: 600; }
+.hoy__control:active { background: rgba(120, 120, 128, 0.5); }
+.hoy__control:disabled { opacity: 0.5; }
 
 /* ---------- Asistente ---------- */
 .chat { height: 100%; min-height: 0; display: flex; flex-direction: column; }
@@ -776,6 +767,11 @@ input:focus { outline: none; border-color: var(--azul); }
 .chat__ia small { display: block; margin-top: 0.25rem; color: var(--texto-2); }
 .chat__historial .chat__vacio { align-self: center; max-width: 100%; margin: auto 0; text-align: center; color: var(--texto-3); }
 #chat-confirmar { margin-bottom: 0.6rem; }
+.chat__historial .chat__bienvenida { align-self: center; max-width: 100%; margin: auto 0; text-align: center; }
+.chat__bienvenida p { color: var(--texto-3); }
+.chat__sugerencias { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; max-width: 34rem; margin-top: 0.9rem; }
+.chat__sugerencia { padding: 0.5rem 0.9rem; border: 0; border-radius: 1.2rem; background: rgba(120, 120, 128, 0.3); font-size: 0.875rem; }
+.chat__sugerencia:active { background: rgba(120, 120, 128, 0.55); }
 .chat__form { flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem; }
 .chat__form input { flex: 1 1 auto; height: 2.6rem; padding: 0 1rem; border-radius: 1.3rem; }
 #chat-mic.escuchando { background: var(--rojo); color: #fff; }
@@ -866,7 +862,12 @@ input:focus { outline: none; border-color: var(--azul); }
   font-size: 0.9rem;
 }
 .agenda time { flex: 0 0 2.9rem; font-size: 0.8rem; font-weight: 600; color: #6cb6ff; font-variant-numeric: tabular-nums; }
-.agenda li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda li span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+.agenda li.pasado { background: rgba(120, 120, 128, 0.14); box-shadow: inset 0.2rem 0 0 rgba(120, 120, 128, 0.5); color: var(--texto-3); }
+.agenda li.pasado time { color: var(--texto-3); }
+.agenda li.ahora { background: rgba(10, 132, 255, 0.34); box-shadow: inset 0.25rem 0 0 var(--azul), 0 0 0 1px rgba(10, 132, 255, 0.55); }
+.agenda li.ahora span { font-weight: 600; }
+.agenda li small { flex: 0 0 auto; margin-left: auto; padding: 0.05rem 0.45rem; border-radius: 0.6rem; background: var(--azul); color: #fff; font-size: 0.6875rem; font-weight: 700; }
 .agenda li.vacio { background: none; box-shadow: none; padding-left: 0; color: var(--texto-3); }
 .agenda li.vacio time { display: none; }
 .agenda .permiso { display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.7rem; font-size: 0.875rem; }
@@ -893,6 +894,12 @@ input:focus { outline: none; border-color: var(--azul); }
 .agenda--recordatorios time { order: 2; flex: 0 0 auto; color: var(--texto-2); font-weight: 400; }
 .agenda--recordatorios .vencido time { color: var(--naranja); }
 .agenda--recordatorios li.vacio::before { display: none; }
+.agenda--recordatorios li[data-id] { cursor: pointer; }
+.agenda--recordatorios li[data-id]:active { background: rgba(120, 120, 128, 0.18); }
+.agenda--recordatorios li.hecho::before { border-color: var(--naranja); background: var(--naranja); box-shadow: inset 0 0 0 0.15rem #2c2c2e; }
+.agenda--recordatorios li.hecho span { color: var(--texto-3); text-decoration: line-through; }
+.agenda--recordatorios .vencido span { color: var(--texto); }
+.agenda--recordatorios .vencido time::before { content: 'Vencido · '; }
 
 /* ---------- Ventanas modales, como las alertas de macOS ---------- */
 .modal {
@@ -1042,7 +1049,7 @@ input:focus { outline: none; border-color: var(--azul); }
   .columna { flex: 0 0 auto; }
   .reloj__hora { font-size: 5.4rem; }
   .alarmas { min-height: 11rem; }
-  .accesos { min-height: 6rem; }
+  .hoy { min-height: 14rem; }
   .monitor, .lanzador { flex: 0 0 auto; }
   .anillos { padding: 0.8rem 0 1rem; }
   .pagina--chat { height: 100%; }

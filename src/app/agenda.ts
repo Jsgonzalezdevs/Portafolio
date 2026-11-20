@@ -1,5 +1,6 @@
 import { CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { ErrorNoAutorizado, llamar, type Emparejamiento } from './conexion';
+import { finDe, momento } from './hoy';
 
 /**
  * Tarjeta de agenda (GET /agenda) y avisos de recordatorios vencidos.
@@ -11,6 +12,8 @@ import { ErrorNoAutorizado, llamar, type Emparejamiento } from './conexion';
 export interface Evento {
   titulo: string;
   inicio: string;
+  /** Las respuestas viejas guardadas en la tablet no lo traen. */
+  fin?: string;
   todoElDia: boolean;
 }
 
@@ -39,6 +42,8 @@ interface Opciones {
   hablar: (texto: string) => void;
   /** Despierta el panel si está en modo noche. */
   despertar: () => void;
+  /** Hay agenda nueva (de la Mac o de la memoria): para la tarjeta «Hoy». */
+  alCambiar?: () => void;
 }
 
 const formatoHora = new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -96,7 +101,7 @@ export function agruparEventos(eventos: Evento[], ahora: Date): { hoy: Evento[];
   };
 }
 
-export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, despertar }: Opciones) {
+export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, despertar, alCambiar }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const tarjeta = $('tarjeta-agenda');
   const contenedor = $('agenda');
@@ -111,7 +116,7 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
   function lista(
     destino: HTMLElement,
     titulo: string | null,
-    items: { hora: string; texto: string; clase?: string }[],
+    items: { hora: string; texto: string; clase?: string; insignia?: string; id?: string }[],
   ) {
     if (titulo) {
       const h = document.createElement('h3');
@@ -127,6 +132,16 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
       const span = document.createElement('span');
       span.textContent = it.texto;
       li.append(t, span);
+      if (it.insignia) {
+        const b = document.createElement('small');
+        b.textContent = it.insignia;
+        li.appendChild(b);
+      }
+      if (it.id) {
+        li.dataset.id = it.id;
+        li.setAttribute('role', 'button');
+        li.setAttribute('aria-label', `Marcar como hecho: ${it.texto}`);
+      }
       ul.appendChild(li);
     }
     destino.appendChild(ul);
@@ -178,9 +193,18 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
 
     if (r.permisos.calendario === 'concedido') {
       const { hoy, manana } = agruparEventos(r.eventos, ahora);
-      const fila = (e: Evento) => ({ hora: e.todoElDia ? 'Todo' : formatoHora.format(new Date(e.inicio)), texto: e.titulo });
+      const fila = (e: Evento) => {
+        const m = e.todoElDia ? 'futuro' : momento(e, ahora);
+        return {
+          hora: e.todoElDia ? 'Todo' : formatoHora.format(new Date(e.inicio)),
+          texto: e.titulo,
+          clase: m,
+          insignia: m === 'ahora' ? `Ahora · hasta ${formatoHora.format(new Date(finDe(e)))}` : undefined,
+        };
+      };
       lista(contenedor, 'Hoy', hoy.length ? hoy.map(fila) : [{ hora: '', texto: 'Nada en el calendario', clase: 'vacio' }]);
-      if (manana.length) lista(contenedor, 'Mañana', manana.map(fila));
+      if (manana.length) lista(contenedor, 'Mañana', manana.map((e) => ({ ...fila(e), clase: 'futuro', insignia: undefined })));
+      llevarAlPresente();
     }
 
     if (tarjetaRecordatorios && contenedorRecordatorios) {
@@ -200,11 +224,61 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
                   hora: vence ? (mismoDia(vence, ahora) ? formatoHora.format(vence) : `${vence.getDate()}/${vence.getMonth() + 1}`) : '',
                   texto: x.titulo,
                   clase: vence && vence < ahora ? 'vencido' : undefined,
+                  id: x.id,
                 };
               })
             : [{ hora: '', texto: 'Todo al día', clase: 'vacio' }],
         );
       }
+    }
+  }
+
+  /**
+   * Desplaza la lista hasta lo que está pasando (o lo siguiente), como «Hoy» en Calendario. Solo si la
+   * persona no movió la lista a mano desde el último desplazamiento automático.
+   */
+  let ultimoAuto = 0;
+  function llevarAlPresente() {
+    if (Math.abs(contenedor.scrollTop - ultimoAuto) > 4) return;
+    const destino = contenedor.querySelector<HTMLElement>('li.ahora, li.futuro');
+    const primero = contenedor.querySelector<HTMLElement>('li');
+    if (!destino || !primero || destino === primero) return;
+    // Deja ver el evento anterior para dar contexto.
+    const anterior = destino.previousElementSibling as HTMLElement | null;
+    contenedor.scrollTop = (anterior ?? destino).offsetTop - primero.offsetTop;
+    ultimoAuto = contenedor.scrollTop;
+  }
+
+  /** Repinta con lo guardado (sin red), para que «pasado / ahora» avance con el reloj. */
+  function repintar() {
+    const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
+    if (guardado && !tarjeta.hidden) pintar(guardado.valor, ultimaCargaOk ? null : guardado.en);
+  }
+  let ultimaCargaOk = false;
+
+  // ---------- Completar recordatorios con un toque ----------
+  contenedorRecordatorios?.addEventListener('click', (ev) => {
+    const li = (ev.target as HTMLElement).closest<HTMLLIElement>('li[data-id]');
+    if (!li || li.classList.contains('hecho')) return;
+    const id = li.dataset.id!;
+    li.classList.add('hecho');
+    // Se quita de lo guardado al momento: con la Mac apagada ya no vuelve a salir ni a avisar.
+    const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
+    if (guardado) {
+      guardarCache(CLAVES.agenda, { ...guardado.valor, recordatorios: guardado.valor.recordatorios.filter((r) => r.id !== id) });
+    }
+    if (cuentaRecordatorios) cuentaRecordatorios.textContent = String(Math.max(0, Number(cuentaRecordatorios.textContent) - 1));
+    void completar(id).then(() => window.setTimeout(() => (li.isConnected ? repintar() : undefined), 900));
+  });
+
+  async function completar(id: string) {
+    const e = emparejamiento();
+    try {
+      if (!e) throw new Error('sin Mac');
+      await llamar(e, `/avisos/${encodeURIComponent(id)}/descartar`, { completar: true });
+    } catch (err) {
+      if (err instanceof ErrorNoAutorizado) return alNoAutorizado();
+      guardarJson(CLAVE_PENDIENTES, [...new Set([...leerJson<string[]>(CLAVE_PENDIENTES, []), id])]);
     }
   }
 
@@ -215,15 +289,24 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
     let reintentoMs = 5 * 60_000;
     try {
       const r = await llamar<RespuestaAgenda>(e, '/agenda');
-      guardarCache(CLAVES.agenda, r);
-      pintar(r);
+      // Lo que se marcó «hecho» sin la Mac no reaparece mientras ella se entera.
+      const pendientes = new Set(leerJson<string[]>(CLAVE_PENDIENTES, []));
+      const limpio = pendientes.size ? { ...r, recordatorios: r.recordatorios.filter((x) => !pendientes.has(x.id)) } : r;
+      guardarCache(CLAVES.agenda, limpio);
+      ultimaCargaOk = true;
+      pintar(limpio);
+      alCambiar?.();
       void completarPendientes(e);
       comprobarAvisos();
     } catch (err) {
       if (err instanceof ErrorNoAutorizado) return alNoAutorizado();
       // La Mac no responde: se muestra lo último que se supo, y se reintenta pronto.
+      ultimaCargaOk = false;
       const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
-      if (guardado) pintar(guardado.valor, guardado.en);
+      if (guardado) {
+        pintar(guardado.valor, guardado.en);
+        alCambiar?.();
+      }
       else if (!contenedor.querySelector('ul')) contenedor.innerHTML = '<p class="tenue">No se pudo leer la agenda.</p>';
       reintentoMs = 60_000;
     }
@@ -308,6 +391,7 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
       if (disponible) void cargar();
     },
     recargar: () => void cargar(),
+    repintar,
     mostrarAvisos,
     comprobarAvisos,
   };

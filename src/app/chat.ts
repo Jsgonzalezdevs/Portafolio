@@ -76,6 +76,9 @@ type Reconocimiento = {
   stop: () => void;
 };
 
+/** Lo de arriba se resuelve en la tablet (sin Mac); lo de abajo lo hace la Mac. */
+const SUGERENCIAS = ['¿Qué tengo hoy?', '¿Cómo está el clima?', 'Temporizador de 10 minutos', 'Mis alarmas', 'Pon música', 'Sube el volumen'];
+
 export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfectos, alSinMac, alLocal }: Opciones) {
   const $ = (id: string) => document.getElementById(id)!;
   const historial = $('chat-historial');
@@ -89,7 +92,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
   const placeholderBase = campo.placeholder;
 
   function burbuja(clase: string, texto: string): HTMLLIElement {
-    historial.querySelector('.chat__vacio')?.remove();
+    historial.querySelector('.chat__vacio, .chat__bienvenida')?.remove();
     const li = document.createElement('li');
     li.className = clase;
     li.textContent = texto;
@@ -194,8 +197,29 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
     nueva = true;
     confirmar.hidden = true;
     historial.textContent = '';
-    burbuja('chat__vacio tenue', 'Charla nueva. ¿En qué te ayudo?');
+    bienvenida('Charla nueva. ¿En qué te ayudo?');
   });
+
+  /** Pantalla vacía con ideas para tocar: muestra lo que sabe hacer sin tener que adivinarlo. */
+  function bienvenida(texto: string) {
+    const li = document.createElement('li');
+    li.className = 'chat__bienvenida';
+    const p = document.createElement('p');
+    p.textContent = texto;
+    const fila = document.createElement('div');
+    fila.className = 'chat__sugerencias';
+    for (const s of SUGERENCIAS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chat__sugerencia';
+      b.textContent = s;
+      b.addEventListener('click', () => void enviar(s));
+      fila.appendChild(b);
+    }
+    li.append(p, fila);
+    historial.appendChild(li);
+  }
+  bienvenida('Pregúntame algo o pídeme que controle la Mac.');
 
   // ---------- Voz nativa (app Android) ----------
   if (nativo) {

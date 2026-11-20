@@ -28,7 +28,8 @@ import {
 } from './alarmas';
 import { borrarCache, CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { obtenerClima, type Clima } from './clima';
-import { finDelDia, horaHablada, inicioDelDia, normalizar, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
+import { finDelDia, horaHablada, inicioDelDia, normalizar, proximaAlarma, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
+import { enCuanto, estadoDelDia, quedan, respuestaAgenda } from './hoy';
 import { duracionHablada, interpretar, responderConsulta } from './comandos';
 import { alFalloDeVoz, audio, callar, diagnosticar, explicar, fijarVozActiva, hablar as hablarWeb, pitido, probar, vozActiva, type Diagnostico } from './sonido';
 import { iniciarChat, puenteNativo } from './chat';
@@ -113,6 +114,7 @@ if (puenteNativo() || ((navigator as Navigator & { deviceMemory?: number }).devi
 }
 
 let emparejamiento: Emparejamiento | null = null;
+let paginaActual = 'inicio';
 let cerrarFlujo: (() => void) | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
 let tocandoVolumen = false;
@@ -395,7 +397,69 @@ function eventosDeHoy(): RespuestaAgenda['eventos'] {
   return guardado ? guardado.eventos.filter((e) => mismoDia(new Date(e.inicio), hoy)) : [];
 }
 
+/** La agenda guardada (de hoy y mañana), o null si la tablet nunca la recibió. */
+function agendaGuardada(): RespuestaAgenda['eventos'] | null {
+  const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda)?.valor;
+  return guardado && guardado.permisos.calendario === 'concedido' ? guardado.eventos : null;
+}
+
+const formatoDiaCorto = new Intl.DateTimeFormat('es-CO', { weekday: 'short' });
+
+/** Tarjeta «Hoy»: lo que está pasando (con su avance) y lo que sigue, con cuenta regresiva. */
+function pintarHoy() {
+  const ahora = new Date();
+  const eventos = agendaGuardada();
+  const d = estadoDelDia(eventos ?? [], ahora, 4);
+
+  const caja = $('hoy-actual');
+  caja.hidden = !d.actual;
+  if (d.actual) {
+    $('hoy-actual-titulo').textContent = d.actual.evento.titulo;
+    $('hoy-actual-resto').textContent = quedan(d.actual.quedanMin);
+    $('hoy-actual-avance').style.width = `${Math.round(d.actual.avance * 100)}%`;
+  }
+
+  const ul = $('hoy-proximos');
+  ul.textContent = '';
+  const fila = (hora: string, texto: string, cuando: string, clase = '') => {
+    const li = document.createElement('li');
+    if (clase) li.className = clase;
+    const t = document.createElement('time');
+    t.textContent = hora;
+    const span = document.createElement('span');
+    span.className = 'hoy__texto';
+    span.textContent = texto;
+    const c = document.createElement('span');
+    c.className = 'hoy__cuando';
+    c.textContent = cuando;
+    li.append(t, span, c);
+    ul.appendChild(li);
+  };
+  for (const e of d.todoElDia) fila('Todo', e.titulo, 'hoy');
+  for (const e of d.proximos) {
+    const inicio = new Date(e.inicio);
+    const esHoy = mismoDia(inicio, ahora);
+    // Lo de hoy, con cuenta regresiva si es pronto; lo de mañana, con el día.
+    const falta = inicio.getTime() - ahora.getTime();
+    fila(formatoHora.format(inicio), e.titulo, esHoy ? (falta < 3 * 3600_000 ? enCuanto(falta) : '') : formatoDiaCorto.format(inicio).replace('.', ''), esHoy ? '' : 'hoy__manana');
+  }
+  if (!d.actual && !d.proximos.length && !d.todoElDia.length) {
+    const li = document.createElement('li');
+    li.className = 'vacio';
+    li.textContent = eventos ? 'Nada más en el calendario. Día libre ✨' : 'La agenda aparece cuando la Mac responda.';
+    ul.appendChild(li);
+  }
+
+  // Alarmas: cuánto falta para la próxima.
+  const proxima = proximaAlarma(estadoAlarmas.alarmas, ahora);
+  const etiqueta = $('alarmas-proxima');
+  etiqueta.hidden = !proxima;
+  if (proxima) etiqueta.textContent = `Suena ${enCuanto(proxima.getTime() - ahora.getTime())}`;
+}
+
 function actualizarAhora() {
+  pintarHoy();
+  if (paginaActual === 'agenda') agendaUI.repintar();
   const ahora = new Date();
   const h = ahora.getHours();
   const tarjetaAhora = $('tarjeta-ahora');
@@ -420,11 +484,11 @@ function actualizarAhora() {
   let mensajeResumen = '';
   if (periodo === 'manana') {
     // Mañana (6-12): clima, cuántos eventos hay hoy y la primera alarma
-    const nEventos = eventosDeHoy().length;
+    const nEventos = estadoDelDia(eventosDeHoy(), ahora).quedanHoy;
     const primeraAlarma = ordenadas(estadoAlarmas.alarmas).find((a) => a.activa);
     const partes: string[] = [];
     if (textoClima) partes.push(textoClima);
-    partes.push(nEventos === 0 ? 'Sin eventos hoy' : `${nEventos} evento${nEventos > 1 ? 's' : ''} hoy`);
+    partes.push(nEventos === 0 ? 'Nada pendiente hoy' : `${nEventos} ${nEventos > 1 ? 'eventos pendientes' : 'evento pendiente'} hoy`);
     if (primeraAlarma) partes.push(`Alarma a las ${primeraAlarma.hora}`);
     mensajeResumen = partes.join(' · ');
   } else if (periodo === 'tarde') {
@@ -501,9 +565,25 @@ function pintarAlarmas() {
   if (!lista) return;
   lista.textContent = '';
   if (!alarmas.length) {
+    // Vacía: alarmas de un toque (todos los días), para no tener que abrir el formulario.
     const vacio = document.createElement('li');
-    vacio.className = 'tenue';
-    vacio.textContent = 'Sin alarmas';
+    vacio.className = 'alarmas__vacia';
+    const texto = document.createElement('p');
+    texto.textContent = 'Sin alarmas. Pon una con un toque:';
+    const fila = document.createElement('div');
+    fila.className = 'alarmas__rapidas';
+    for (const hora of ['05:30', '06:00', '06:30', '07:00']) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'alarmas__rapida';
+      b.textContent = hora;
+      b.addEventListener('click', () => {
+        cambiarAlarmas(crearAlarma(estadoAlarmas, hora, ''));
+        avisar(`Alarma a las ${hora}, todos los días`);
+      });
+      fila.appendChild(b);
+    }
+    vacio.append(texto, fila);
     lista.appendChild(vacio);
     actualizarAhora();
     return;
@@ -1599,6 +1679,8 @@ function comandoLocal(texto: string): string | null {
   if (consulta) return consulta;
 
   switch (c.tipo) {
+    case 'agenda':
+      return respuestaAgenda(agendaGuardada(), ahora);
     case 'temporizador': {
       const habia = timerSegundosRestantes > 0;
       iniciarTimer(c.segundos / 60);
@@ -1663,7 +1745,10 @@ const agendaUI = iniciarAgenda({
   alNoAutorizado: () => desemparejar('El token ya no es válido. Vuelve a emparejar.'),
   hablar: hablarTexto,
   despertar: () => despertarPanel(60_000),
+  alCambiar: () => pintarHoy(),
 });
+
+$('hoy-ver-agenda').addEventListener('click', () => mostrarPagina('agenda'));
 
 iniciarChat({
   // Hora, fecha, clima, temporizadores y alarmas: la tablet los resuelve sola, con o sin Mac.
@@ -1741,7 +1826,6 @@ window.setInterval(() => {
 }, 10 * 60_000);
 
 // ---------- Pantallas, Dock y deslizamiento ----------
-let paginaActual = 'inicio';
 
 /** Las pantallas que se pueden ver ahora, en el orden del Dock. */
 function paginasVisibles(): HTMLElement[] {
@@ -1758,6 +1842,7 @@ function mostrarPagina(nombre: string) {
     d.classList.toggle('dock__item--activo', d.dataset.ir === paginaActual);
   }
   $('menubar-pagina').textContent = destino.dataset.titulo ?? '';
+  if (paginaActual === 'agenda') agendaUI.repintar();
   pedirAlineacion();
 }
 
