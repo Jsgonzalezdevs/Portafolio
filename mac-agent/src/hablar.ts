@@ -27,6 +27,9 @@ export interface ClimaVoz {
   ciudad: string;
   tempC: number;
   condicion: string;
+  maxC?: number;
+  minC?: number;
+  lluvia?: string | null;
 }
 
 // ---------- Piezas ----------

@@ -254,7 +254,14 @@ export function responderConsulta(c: Comando, { ahora, clima, alarmas }: DatosRe
     case 'fecha':
       return `Hoy es ${formatoFechaLarga.format(ahora)}.`;
     case 'clima':
-      return clima ? `En ${clima.ciudad} hay ${clima.tempC} grados y el cielo está ${clima.condicion.toLowerCase()}.` : 'Todavía no tengo el clima. Lo busco cuando haya conexión.';
+      if (!clima) return 'Todavía no tengo el clima. Lo busco cuando haya conexión.';
+      return [
+        `En ${clima.ciudad} hay ${clima.tempC} grados y el cielo está ${clima.condicion.toLowerCase()}.`,
+        clima.minC !== undefined && clima.maxC !== undefined ? `Hoy, entre ${clima.minC} y ${clima.maxC} grados.` : '',
+        clima.lluvia ? `${clima.lluvia.replace(/ \(\d+ %\)$/, '')}.` : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
     case 'alarmas': {
       const siguiente = proximaAlarma(alarmas, ahora);
       const activas = alarmas.filter((a) => a.activa).length;

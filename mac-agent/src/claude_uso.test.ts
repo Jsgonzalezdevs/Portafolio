@@ -91,7 +91,7 @@ test('GestorClaudeUso: lee auth y calcula el uso completo', async () => {
     }) + '\n',
   );
 
-  const mockEjecutor = async (bin: string, args: string[]) => {
+  const mockEjecutor = async (_bin: string, args: string[]) => {
     if (args[0] === 'auth' && args[1] === 'status') {
       return JSON.stringify({
         loggedIn: true,

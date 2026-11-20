@@ -407,12 +407,6 @@ function pintarClima() {
 // ---------- Tarjeta Ahora ----------
 const mismoDia = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-/** Eventos de hoy según lo último que respondió la Mac (guardado en la tablet). */
-function eventosDeHoy(): RespuestaAgenda['eventos'] {
-  const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda)?.valor;
-  const hoy = new Date();
-  return guardado ? guardado.eventos.filter((e) => mismoDia(new Date(e.inicio), hoy)) : [];
-}
 
 /** La agenda guardada (de hoy y mañana), o null si la tablet nunca la recibió. */
 function agendaGuardada(): RespuestaAgenda['eventos'] | null {
@@ -496,29 +490,23 @@ function actualizarAhora() {
   if (elIcono) elIcono.textContent = icono;
 
   const clima = climaActual();
-  const textoClima = clima ? `${clima.tempC > 0 ? '+' : ''}${clima.tempC}° en ${clima.ciudad} (${clima.condicion.toLowerCase()})` : '';
+  const textoClima = clima
+    ? [
+        `${clima.tempC > 0 ? '+' : ''}${clima.tempC}° en ${clima.ciudad} (${clima.condicion.toLowerCase()})`,
+        clima.minC !== undefined && clima.maxC !== undefined ? `${clima.minC}–${clima.maxC}°` : '',
+        clima.lluvia ? `☔ ${clima.lluvia}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
-  let mensajeResumen = '';
+  // La agenda ya está en «Hoy»: aquí va el tiempo (con la lluvia) y, por la mañana, la primera alarma.
+  let mensajeResumen = textoClima;
   if (periodo === 'manana') {
-    // Mañana (6-12): clima, cuántos eventos hay hoy y la primera alarma
-    const nEventos = estadoDelDia(eventosDeHoy(), ahora).quedanHoy;
     const primeraAlarma = ordenadas(estadoAlarmas.alarmas).find((a) => a.activa);
-    const partes: string[] = [];
-    if (textoClima) partes.push(textoClima);
-    partes.push(nEventos === 0 ? 'Nada pendiente hoy' : `${nEventos} ${nEventos > 1 ? 'eventos pendientes' : 'evento pendiente'} hoy`);
-    if (primeraAlarma) partes.push(`Alarma a las ${primeraAlarma.hora}`);
-    mensajeResumen = partes.join(' · ');
-  } else if (periodo === 'tarde') {
-    // Tarde (12-18): el próximo evento o «nada pendiente»
-    const proximo = eventosDeHoy().find((ev) => !ev.todoElDia && new Date(ev.inicio) >= ahora);
-    if (proximo) {
-      const horaEv = formatoHora.format(new Date(proximo.inicio));
-      mensajeResumen = `${proximo.titulo} a las ${horaEv}${textoClima ? ` · ${textoClima}` : ''}`;
-    } else {
-      mensajeResumen = `Nada pendiente por hoy${textoClima ? ` · ${textoClima}` : ''}`;
-    }
+    if (primeraAlarma) mensajeResumen = [mensajeResumen, `Alarma a las ${primeraAlarma.hora}`].filter(Boolean).join(' · ');
   } else if (periodo === 'noche') {
-    mensajeResumen = `Prepárate para descansar${textoClima ? ` · ${textoClima}` : ''}`;
+    mensajeResumen = ['Prepárate para descansar', textoClima].filter(Boolean).join(' · ');
   }
 
   const elResumen = $('ahora-resumen');

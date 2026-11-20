@@ -10,6 +10,36 @@ export interface Clima {
   tempC: number;
   condicion: string;
   icono: string;
+  /** Del día (las lecturas viejas guardadas no lo traen). */
+  maxC?: number;
+  minC?: number;
+  /** «Lluvia hasta las 18:00», «Lluvia hacia las 15:00»; null si no se espera. */
+  lluvia?: string | null;
+}
+
+export interface Hora {
+  /** «2026-11-20T15:00», hora local de la ciudad. */
+  t: string;
+  prob: number;
+  codigo: number;
+}
+
+const LLUEVE = (codigo: number) => (codigo >= 51 && codigo <= 67) || (codigo >= 80 && codigo <= 82) || codigo >= 95;
+const esLluvia = (h: Hora) => LLUEVE(h.codigo) && h.prob >= 60;
+const horaDe = (t: string) => t.slice(11, 16);
+
+/**
+ * Aviso corto de lluvia para las próximas horas (la primera es la hora en curso):
+ * si ya llueve, hasta cuándo; si no, desde cuándo. Exportado para tests.
+ */
+export function avisoLluvia(horas: Hora[]): string | null {
+  if (!horas.length) return null;
+  if (esLluvia(horas[0])) {
+    const fin = horas.findIndex((h) => !esLluvia(h));
+    return fin === -1 ? 'Lluvia el resto del día' : `Lluvia hasta las ${horaDe(horas[fin].t)}`;
+  }
+  const inicio = horas.find(esLluvia);
+  return inicio ? `Lluvia hacia las ${horaDe(inicio.t)} (${inicio.prob} %)` : null;
 }
 
 /** Códigos del tiempo de la OMM → texto en español e icono (con variante de noche donde cambia). */
@@ -87,13 +117,29 @@ export async function ubicar(ciudad: string, pedir: Pedir = fetch): Promise<Ubic
 export async function obtenerClima(ciudad: string, pedir: Pedir = fetch): Promise<Clima> {
   const u = await ubicar(ciudad, pedir);
   const r = await pedir(
-    `https://api.open-meteo.com/v1/forecast?latitude=${u.latitud}&longitude=${u.longitud}&current=temperature_2m,weather_code,is_day&timezone=auto`,
+    `https://api.open-meteo.com/v1/forecast?latitude=${u.latitud}&longitude=${u.longitud}&current=temperature_2m,weather_code,is_day&hourly=precipitation_probability,weather_code&forecast_hours=10&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`,
     { signal: conLimite(10_000) },
   );
   if (!r.ok) throw new Error(`Open-Meteo respondió ${r.status}`);
-  const d = (await r.json()) as { current?: { temperature_2m?: number; weather_code?: number; is_day?: number } };
+  const d = (await r.json()) as {
+    current?: { temperature_2m?: number; weather_code?: number; is_day?: number };
+    hourly?: { time?: string[]; precipitation_probability?: (number | null)[]; weather_code?: (number | null)[] };
+    daily?: { temperature_2m_max?: (number | null)[]; temperature_2m_min?: (number | null)[] };
+  };
   const c = d.current;
   if (!c || typeof c.temperature_2m !== 'number' || typeof c.weather_code !== 'number') throw new Error('Respuesta de clima inesperada');
   const { condicion, icono } = describirCodigo(c.weather_code, c.is_day !== 0);
-  return { ciudad: u.nombre, tempC: Math.round(c.temperature_2m), condicion, icono };
+  const h = d.hourly;
+  const horas: Hora[] = (h?.time ?? []).map((t, i) => ({ t, prob: h?.precipitation_probability?.[i] ?? 0, codigo: h?.weather_code?.[i] ?? 0 }));
+  const max = d.daily?.temperature_2m_max?.[0];
+  const min = d.daily?.temperature_2m_min?.[0];
+  return {
+    ciudad: u.nombre,
+    tempC: Math.round(c.temperature_2m),
+    condicion,
+    icono,
+    maxC: typeof max === 'number' ? Math.round(max) : undefined,
+    minC: typeof min === 'number' ? Math.round(min) : undefined,
+    lluvia: avisoLluvia(horas) ?? undefined,
+  };
 }
