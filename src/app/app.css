@@ -783,6 +783,13 @@ input:focus { outline: none; border-color: var(--azul); }
 .anillo svg { grid-area: 1 / 1; width: 5.4rem; height: 5.4rem; transform: rotate(-90deg); }
 .anillo b { grid-area: 1 / 1; font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .anillo span { grid-area: 2 / 1; font-size: 0.8rem; color: var(--texto-2); white-space: nowrap; }
+/* En horizontal la tarjeta de la Mac tiene toda la altura: anillos grandes en 2×2 en vez de una fila chica. */
+@media (orientation: landscape) {
+  .monitor .anillos { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.3rem; }
+  .monitor .anillo svg { width: 7.2rem; height: 7.2rem; }
+  .monitor .anillo b { font-size: 1.45rem; }
+  .monitor .anillo span { font-size: 0.875rem; }
+}
 .anillo__pista { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 6; }
 .anillo__arco {
   fill: none;
@@ -816,7 +823,7 @@ input:focus { outline: none; border-color: var(--azul); }
 .boton--escena .escena-nombre { font-size: 0.85rem; font-weight: 600; line-height: 1.2; }
 
 /* Apps, como Launchpad */
-.lanzador { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.lanzador { flex: 0 0 auto; }
 .lanzador__rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.8rem, 1fr)); gap: 0.9rem 0.4rem; margin-top: 0.7rem; }
 .app { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-width: 0; padding: 0; border: 0; background: none; }
 .app__icono {
@@ -1053,7 +1060,7 @@ input:focus { outline: none; border-color: var(--azul); }
   .reloj__hora { font-size: 5.4rem; }
   .alarmas { min-height: 11rem; }
   .hoy { min-height: 14rem; }
-  .monitor, .lanzador { flex: 0 0 auto; }
+  .monitor { flex: 0 0 auto; }
   .anillos { padding: 0.8rem 0 1rem; }
   .pagina--chat { height: 100%; }
   .chat { flex: 1 1 0; min-height: 20rem; }
