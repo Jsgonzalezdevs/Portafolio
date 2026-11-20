@@ -1805,6 +1805,16 @@ function pintarSonido(d: Diagnostico) {
   }
 }
 
+// ---------- Tocar fuera cierra las ventanas de consulta ----------
+// Las de alarma sonando y recordatorio vencido no: ahí hay que elegir un botón a propósito.
+const CIERRAN_AL_TOCAR_FUERA = new Set(['modal-timer', 'modal-sonido', 'modal-clima', 'modal-alarma', 'modal-desemparejar']);
+for (const id of CIERRAN_AL_TOCAR_FUERA) {
+  const modal = $(id);
+  modal.addEventListener('click', (ev) => {
+    if (ev.target === modal) modal.hidden = true;
+  });
+}
+
 // ---------- Pronóstico por horas (tocar el clima de la barra) ----------
 $('clima').addEventListener('click', () => {
   const c = climaActual();
