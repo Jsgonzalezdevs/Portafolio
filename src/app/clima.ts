@@ -15,6 +15,16 @@ export interface Clima {
   minC?: number;
   /** «Lluvia hasta las 18:00», «Lluvia hacia las 15:00»; null si no se espera. */
   lluvia?: string | null;
+  /** Las próximas horas, para el pronóstico al tocar el clima. */
+  horas?: HoraPronostico[];
+}
+
+export interface HoraPronostico {
+  /** «15:00» */
+  hora: string;
+  tempC: number;
+  prob: number;
+  icono: string;
 }
 
 export interface Hora {
@@ -117,13 +127,13 @@ export async function ubicar(ciudad: string, pedir: Pedir = fetch): Promise<Ubic
 export async function obtenerClima(ciudad: string, pedir: Pedir = fetch): Promise<Clima> {
   const u = await ubicar(ciudad, pedir);
   const r = await pedir(
-    `https://api.open-meteo.com/v1/forecast?latitude=${u.latitud}&longitude=${u.longitud}&current=temperature_2m,weather_code,is_day&hourly=precipitation_probability,weather_code&forecast_hours=10&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`,
+    `https://api.open-meteo.com/v1/forecast?latitude=${u.latitud}&longitude=${u.longitud}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,precipitation_probability,weather_code,is_day&forecast_hours=10&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`,
     { signal: conLimite(10_000) },
   );
   if (!r.ok) throw new Error(`Open-Meteo respondió ${r.status}`);
   const d = (await r.json()) as {
     current?: { temperature_2m?: number; weather_code?: number; is_day?: number };
-    hourly?: { time?: string[]; precipitation_probability?: (number | null)[]; weather_code?: (number | null)[] };
+    hourly?: { time?: string[]; temperature_2m?: (number | null)[]; precipitation_probability?: (number | null)[]; weather_code?: (number | null)[]; is_day?: (number | null)[] };
     daily?: { temperature_2m_max?: (number | null)[]; temperature_2m_min?: (number | null)[] };
   };
   const c = d.current;
@@ -141,5 +151,13 @@ export async function obtenerClima(ciudad: string, pedir: Pedir = fetch): Promis
     maxC: typeof max === 'number' ? Math.round(max) : undefined,
     minC: typeof min === 'number' ? Math.round(min) : undefined,
     lluvia: avisoLluvia(horas) ?? undefined,
+    horas: horas.length
+      ? horas.slice(1, 9).map((x, i) => ({
+          hora: horaDe(x.t),
+          tempC: Math.round(h?.temperature_2m?.[i + 1] ?? c.temperature_2m!),
+          prob: x.prob,
+          icono: describirCodigo(x.codigo, (h?.is_day?.[i + 1] ?? 1) !== 0).icono,
+        }))
+      : undefined,
   };
 }

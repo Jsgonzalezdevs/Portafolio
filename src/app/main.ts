@@ -1805,6 +1805,37 @@ function pintarSonido(d: Diagnostico) {
   }
 }
 
+// ---------- Pronóstico por horas (tocar el clima de la barra) ----------
+$('clima').addEventListener('click', () => {
+  const c = climaActual();
+  if (!c) return;
+  const rango = c.minC !== undefined && c.maxC !== undefined ? ` Hoy entre ${c.minC}° y ${c.maxC}°.` : '';
+  $('clima-modal-titulo').textContent = `${c.icono} ${c.tempC}° en ${c.ciudad}`;
+  $('clima-modal-resumen').textContent = `${c.condicion}.${rango}${c.lluvia ? ` ${c.lluvia}.` : ''}`;
+  const ol = $('clima-modal-horas');
+  ol.textContent = '';
+  for (const h of c.horas ?? []) {
+    const li = document.createElement('li');
+    const t = document.createElement('time');
+    t.textContent = h.hora;
+    const i = document.createElement('span');
+    i.className = 'icono';
+    i.textContent = h.icono;
+    const b = document.createElement('b');
+    b.textContent = `${h.tempC}°`;
+    const p = document.createElement('small');
+    p.textContent = `💧${h.prob}%`;
+    if (h.prob < 30) p.className = 'seco';
+    li.append(t, i, b, p);
+    ol.appendChild(li);
+  }
+  ol.hidden = !c.horas?.length;
+  $('modal-clima').hidden = false;
+});
+$('clima-cerrar').addEventListener('click', () => {
+  $('modal-clima').hidden = true;
+});
+
 $('boton-sonido').addEventListener('click', () => {
   $<HTMLInputElement>('sonido-voz').checked = vozActiva();
   $('modal-sonido').hidden = false;

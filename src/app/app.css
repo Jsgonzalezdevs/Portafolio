@@ -398,6 +398,15 @@ input:focus { outline: none; border-color: var(--azul); }
   -webkit-overflow-scrolling: touch;
 }
 .lista-alarmas > .tenue, .lista-alarmas__vacia { padding: 0.5rem 0; font-size: 0.875rem; color: var(--texto-3); }
+.menubar #clima { cursor: pointer; }
+.clima-modal__resumen { margin-bottom: 0.9rem; color: var(--texto-2); }
+.clima-horas { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0.3rem; margin: 0 0 1rem; padding: 0; list-style: none; text-align: center; }
+.clima-horas li { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.5rem 0.1rem; border-radius: 0.7rem; background: var(--relleno); }
+.clima-horas time { font-size: 0.75rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.clima-horas .icono { font-size: 1.4rem; line-height: 1; }
+.clima-horas b { font-size: 1rem; font-weight: 600; }
+.clima-horas small { font-size: 0.7rem; color: #6cb6ff; font-variant-numeric: tabular-nums; }
+.clima-horas small.seco { color: var(--texto-3); }
 .dias { margin: 0; padding: 0; border: 0; }
 .dias legend { padding: 0; margin-bottom: 0.4rem; font-size: 0.875rem; }
 .dias__fila { display: flex; gap: 0.35rem; }

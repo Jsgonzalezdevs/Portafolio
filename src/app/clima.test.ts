@@ -23,7 +23,7 @@ describe('obtenerClima', () => {
       'geocoding-api': { results: [{ name: 'Ibagué', latitude: 4.4, longitude: -75.2 }] },
       'api.open-meteo': {
         current: { temperature_2m: 22.6, weather_code: 81, is_day: 1 },
-        hourly: { time: ['2026-11-20T10:00', '2026-11-20T11:00', '2026-11-20T12:00'], precipitation_probability: [100, 90, 20], weather_code: [81, 53, 3] },
+        hourly: { time: ['2026-11-20T10:00', '2026-11-20T11:00', '2026-11-20T12:00'], temperature_2m: [22.6, 23.4, 24.6], precipitation_probability: [100, 90, 20], weather_code: [81, 53, 3], is_day: [1, 1, 1] },
         daily: { temperature_2m_max: [26.4], temperature_2m_min: [17.8] },
       },
     };
@@ -33,5 +33,9 @@ describe('obtenerClima', () => {
     }) as unknown as typeof fetch;
     const c = await obtenerClima(`Prueba ${Math.random()}`, pedir);
     expect(c).toMatchObject({ ciudad: 'Ibagué', tempC: 23, condicion: 'Chubascos', maxC: 26, minC: 18, lluvia: 'Lluvia hasta las 12:00' });
+    expect(c.horas).toEqual([
+      { hora: '11:00', tempC: 23, prob: 90, icono: '🌦️' },
+      { hora: '12:00', tempC: 25, prob: 20, icono: '☁️' },
+    ]);
   });
 });
