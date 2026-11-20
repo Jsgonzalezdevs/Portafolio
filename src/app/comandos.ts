@@ -256,7 +256,7 @@ export function responderConsulta(c: Comando, { ahora, clima, alarmas }: DatosRe
     case 'clima':
       if (!clima) return 'Todavía no tengo el clima. Lo busco cuando haya conexión.';
       return [
-        `En ${clima.ciudad} hay ${clima.tempC} grados y el cielo está ${clima.condicion.toLowerCase()}.`,
+        `En ${clima.ciudad} hay ${clima.tempC} grados, ${clima.condicion.toLowerCase()}.`,
         clima.minC !== undefined && clima.maxC !== undefined ? `Hoy, entre ${clima.minC} y ${clima.maxC} grados.` : '',
         clima.lluvia ? `${clima.lluvia.replace(/ \(\d+ %\)$/, '')}.` : '',
       ]

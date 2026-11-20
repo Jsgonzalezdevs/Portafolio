@@ -130,7 +130,7 @@ describe('respuestas de consulta', () => {
   });
 
   it('cuenta el clima y avisa si no lo tiene', () => {
-    expect(responderConsulta({ tipo: 'clima' }, datos)).toBe('En Ibagué hay 24 grados y el cielo está parcialmente nublado.');
+    expect(responderConsulta({ tipo: 'clima' }, datos)).toBe('En Ibagué hay 24 grados, parcialmente nublado.');
     expect(responderConsulta({ tipo: 'clima' }, { ...datos, clima: null })).toMatch(/Todavía no tengo el clima/);
   });
 

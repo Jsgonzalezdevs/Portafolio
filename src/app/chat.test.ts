@@ -105,3 +105,18 @@ describe('chat con la app Android', () => {
     expect(document.getElementById('chat-historial')!.textContent).toContain('necesita internet');
   });
 });
+
+describe('la charla sobrevive a una recarga', () => {
+  it('solo lo de las últimas 12 h y con forma válida', async () => {
+    const { charlaVigente } = await import('./chat');
+    const ahora = 1_800_000_000_000;
+    const burbujas = [
+      { de: 'yo' as const, texto: '¿Qué tengo hoy?' },
+      { de: 'ia' as const, texto: 'Nada más por hoy.' },
+    ];
+    expect(charlaVigente({ en: ahora - 3_600_000, burbujas }, ahora)).toEqual(burbujas);
+    expect(charlaVigente({ en: ahora - 13 * 3_600_000, burbujas }, ahora)).toEqual([]);
+    expect(charlaVigente(null, ahora)).toEqual([]);
+    expect(charlaVigente({ en: ahora, burbujas: [{ de: 'otro', texto: 'x' }, { de: 'ia', texto: '' }] as never }, ahora)).toEqual([]);
+  });
+});

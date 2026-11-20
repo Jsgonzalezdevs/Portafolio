@@ -65,6 +65,39 @@ export const puenteNativo = (): PuenteNativo | undefined =>
 
 const MAX_BURBUJAS = 30;
 
+// ---------- Recordar la charla ----------
+// El panel se recarga (versión nueva de noche, un reinicio de la app…): la charla del día no se pierde.
+
+const CLAVE_CHARLA = 'asistente.charla';
+const VIGENCIA_CHARLA_MS = 12 * 3_600_000;
+
+export interface Burbuja {
+  /** yo = lo que dijo la persona; ia = respuesta; fallo = error. */
+  de: 'yo' | 'ia' | 'fallo';
+  texto: string;
+}
+
+interface CharlaGuardada {
+  en: number;
+  burbujas: Burbuja[];
+}
+
+/** Lo guardado, si es de hace menos de 12 h; exportado para tests. */
+export function charlaVigente(guardada: CharlaGuardada | null, ahora: number): Burbuja[] {
+  if (!guardada || !Array.isArray(guardada.burbujas) || ahora - guardada.en > VIGENCIA_CHARLA_MS || guardada.en > ahora) return [];
+  return guardada.burbujas
+    .filter((b) => (b.de === 'yo' || b.de === 'ia' || b.de === 'fallo') && typeof b.texto === 'string' && b.texto.length > 0)
+    .slice(-MAX_BURBUJAS);
+}
+
+function leerCharla(): Burbuja[] {
+  try {
+    return charlaVigente(JSON.parse(localStorage.getItem(CLAVE_CHARLA) ?? 'null') as CharlaGuardada | null, Date.now());
+  } catch {
+    return [];
+  }
+}
+
 type Reconocimiento = {
   lang: string;
   interimResults: boolean;
@@ -127,6 +160,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
     if (local) {
       burbuja('chat__yo', limpio);
       burbuja('chat__ia', local);
+      guardarCharla();
       if (debeHablar(porVoz)) hablar(local);
       else if (porVoz) nativo?.listo();
       return;
@@ -177,6 +211,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
     } finally {
       enviando = false;
       enviarBoton.disabled = false;
+      guardarCharla();
       historial.scrollTop = historial.scrollHeight;
     }
   }
@@ -197,6 +232,7 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
     nueva = true;
     confirmar.hidden = true;
     historial.textContent = '';
+    guardarCharla();
     bienvenida('Charla nueva. ¿En qué te ayudo?');
   });
 
@@ -219,7 +255,32 @@ export function iniciarChat({ emparejamiento, alNoAutorizado, alAcciones, alEfec
     li.append(p, fila);
     historial.appendChild(li);
   }
-  bienvenida('Pregúntame algo o pídeme que controle la Mac.');
+  /** Guarda lo que se ve (sin «Pensando…» ni la bienvenida). */
+  function guardarCharla() {
+    const burbujas: Burbuja[] = [];
+    for (const li of Array.from(historial.children)) {
+      const c = li.classList;
+      if (c.contains('pensando') || !li.textContent) continue;
+      // El texto de la burbuja sin la nota de acciones fallidas (<small>), que se añade aparte.
+      const texto = li.firstChild?.nodeType === Node.TEXT_NODE ? (li.firstChild.textContent ?? '') : (li.textContent ?? '');
+      if (c.contains('chat__yo')) burbujas.push({ de: 'yo', texto });
+      else if (c.contains('fallo')) burbujas.push({ de: 'fallo', texto });
+      else if (c.contains('chat__ia')) burbujas.push({ de: 'ia', texto });
+    }
+    try {
+      if (burbujas.length) localStorage.setItem(CLAVE_CHARLA, JSON.stringify({ en: Date.now(), burbujas }));
+      else localStorage.removeItem(CLAVE_CHARLA);
+    } catch {
+      /* sin almacenamiento */
+    }
+  }
+
+  const anteriores = leerCharla();
+  if (anteriores.length) {
+    for (const b of anteriores) burbuja(b.de === 'yo' ? 'chat__yo' : b.de === 'fallo' ? 'chat__ia fallo' : 'chat__ia', b.texto);
+  } else {
+    bienvenida('Pregúntame algo o pídeme que controle la Mac.');
+  }
 
   // ---------- Voz nativa (app Android) ----------
   if (nativo) {
