@@ -86,6 +86,21 @@ describe('clima directo', () => {
     expect(describirCodigo(1234, true).condicion).toBe('Tiempo variable');
   });
 
+  it('funciona en el WebView de la tablet (Chrome 95), que no tiene AbortSignal.timeout', async () => {
+    vi.stubGlobal('AbortSignal', Object.assign(Object.create(AbortSignal.prototype), { timeout: undefined }));
+    try {
+      const pedir = vi.fn(async (url: string, init?: RequestInit) => {
+        expect(init?.signal).toBeInstanceOf(Object); // un límite de tiempo sí se pasa, armado a mano
+        return url.includes('geocoding')
+          ? respuesta({ results: [{ name: 'Ibagué', latitude: 4.43, longitude: -75.2 }] })
+          : respuesta({ current: { temperature_2m: 20, weather_code: 0, is_day: 1 } });
+      }) as unknown as typeof fetch;
+      expect(await obtenerClima('Sin timeout', pedir)).toMatchObject({ ciudad: 'Ibagué', tempC: 20 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('busca la ciudad una sola vez y luego el clima', async () => {
     const urls: string[] = [];
     const pedir = vi.fn(async (url: string) => {

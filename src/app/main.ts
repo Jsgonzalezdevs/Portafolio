@@ -1765,7 +1765,8 @@ void arrancar();
 
 // Que /app abra aunque la tablet se reinicie sin internet: ver public/app-sw.js. Solo en producción
 // (en desarrollo un caché viejo estorbaría) y sin que un fallo aquí pueda romper el panel.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// En la app Android no hace falta (la app abre sola) y su WebView no deja registrarlo.
+if ('serviceWorker' in navigator && import.meta.env.PROD && !puenteNativo()) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/app-sw.js', { scope: '/app' }).catch(() => {
       /* sin service worker el panel funciona igual, solo que necesita red para abrir */

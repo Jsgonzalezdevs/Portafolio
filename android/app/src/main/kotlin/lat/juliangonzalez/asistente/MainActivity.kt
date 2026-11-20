@@ -11,18 +11,22 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.net.http.SslError
 import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 /**
  * Kiosco: el dashboard de /app a pantalla completa, siempre encendido, con un
@@ -43,6 +47,10 @@ class MainActivity : Activity() {
     private var ultimaClaveBateria: String? = null
 
     private val reintentar = Runnable { cargar() }
+
+    /** Verifica certificados que el WebView de Android 6 no conoce (ver Confianza). Uno a la vez: el primero deja listo a los demás. */
+    private val confianza by lazy { Confianza(this) }
+    private val verificador = Executors.newSingleThreadExecutor()
 
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
     override fun onCreate(estado: Bundle?) {
@@ -95,6 +103,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         voz.liberar()
+        verificador.shutdownNow()
         web.destroy()
         super.onDestroy()
     }
@@ -231,7 +240,36 @@ class MainActivity : Activity() {
         override fun onReceivedError(vista: WebView, peticion: WebResourceRequest, error: WebResourceError) {
             if (peticion.isForMainFrame) sinConexion(error.description?.toString() ?: "")
         }
+
+        /**
+         * Android 6 no trae las raíces nuevas de Let's Encrypt: sin esto el panel queda en blanco. Solo se sigue
+         * si la cadena es válida con las raíces que lleva la app; cualquier otro fallo (caducado, otro nombre) se rechaza.
+         */
+        override fun onReceivedSslError(vista: WebView, manejador: SslErrorHandler, error: SslError) {
+            val uri = Uri.parse(error.url)
+            val host = uri.host
+            if (host == null || error.primaryError != SslError.SSL_UNTRUSTED) {
+                manejador.cancel()
+                if (host == origenHost()) sinConexion("Certificado no válido para $host")
+                return
+            }
+            val puerto = if (uri.port == -1) 443 else uri.port
+            Log.i("Confianza", "El WebView rechazó el certificado de $host (${error.url}); se verifica con las raíces de la app")
+            verificador.execute {
+                val confiable = confianza.verificar(host, puerto, error.certificate)
+                principal.post {
+                    if (confiable) {
+                        manejador.proceed()
+                    } else {
+                        manejador.cancel()
+                        if (host == origenHost()) sinConexion("No se pudo verificar el certificado de $host")
+                    }
+                }
+            }
+        }
     }
+
+    private fun origenHost(): String? = Uri.parse(origen).host
 
     /** Pantalla propia cuando no carga el panel: reintenta sola y deja abrir Ajustes (por si la URL está mal). */
     private fun sinConexion(detalle: String) {

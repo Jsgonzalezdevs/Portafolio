@@ -60,13 +60,20 @@ interface Ubicacion {
 
 const clave = (ciudad: string) => `geo.${ciudad.trim().toLowerCase()}`;
 
+/** `AbortSignal.timeout` llegó en Chrome 103 y el WebView de la tablet es el 95: el límite se arma a mano. */
+function conLimite(ms: number): AbortSignal {
+  const control = new AbortController();
+  setTimeout(() => control.abort(), ms);
+  return control.signal;
+}
+
 /** Coordenadas de una ciudad por su nombre (se piden una vez y quedan guardadas). */
 export async function ubicar(ciudad: string, pedir: Pedir = fetch): Promise<Ubicacion> {
   const guardada = leerCache<Ubicacion>(clave(ciudad));
   if (guardada) return guardada.valor;
   const r = await pedir(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(ciudad)}&count=1&language=es`,
-    { signal: AbortSignal.timeout(10_000) },
+    { signal: conLimite(10_000) },
   );
   if (!r.ok) throw new Error(`No se pudo ubicar «${ciudad}» (${r.status})`);
   const d = (await r.json()) as { results?: { name: string; latitude: number; longitude: number }[] };
@@ -81,7 +88,7 @@ export async function obtenerClima(ciudad: string, pedir: Pedir = fetch): Promis
   const u = await ubicar(ciudad, pedir);
   const r = await pedir(
     `https://api.open-meteo.com/v1/forecast?latitude=${u.latitud}&longitude=${u.longitud}&current=temperature_2m,weather_code,is_day&timezone=auto`,
-    { signal: AbortSignal.timeout(10_000) },
+    { signal: conLimite(10_000) },
   );
   if (!r.ok) throw new Error(`Open-Meteo respondió ${r.status}`);
   const d = (await r.json()) as { current?: { temperature_2m?: number; weather_code?: number; is_day?: number } };

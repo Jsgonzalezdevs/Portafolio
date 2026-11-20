@@ -85,6 +85,31 @@ En **Voz**, elige «Personalizada».
 Sin AccessKey todo funciona igual, pero se habla tocando el botón de
 micrófono del chat.
 
+## Certificados en Android 6 (por qué la app lleva dos raíces)
+
+Let's Encrypt cambió su jerarquía y hoy casi todo (juliangonzalez.lat en Vercel, Open-Meteo, GitHub) cuelga de
+las raíces **ISRG Root X1 / X2**, que Android trae desde la 7.1.1. En Android 6 el WebView las rechaza
+(`net_error -202`) y la pantalla se queda **en blanco**, sin siquiera el aviso de «sin conexión».
+
+La app lo resuelve en `Confianza.kt`: lleva las dos raíces (públicas, en `res/raw/`, sacadas del llavero del
+sistema de macOS) y, cuando el WebView rechaza un certificado «no confiable», abre ella misma una conexión TLS
+al mismo sitio validándola con esas raíces. Solo si la cadena es válida (fechas y nombre incluidos) **y** el
+certificado es exactamente el que rechazó el WebView, le dice que siga. Caducado, de otro nombre o falso: se
+rechaza igual. El navegador Chrome de la tablet sigue sin confiar en esos sitios; solo la app lo arregla.
+
+Las raíces vencen en 2035 (X1) y 2040 (X2). Si Let's Encrypt cambia de raíz otra vez, habrá que añadir la nueva.
+
+El WebView de esta tablet es el **95** (no el 106): el panel no puede usar APIs posteriores (p. ej.
+`AbortSignal.timeout`, de Chrome 103).
+
+## Depurar con el cable
+
+```bash
+adb logcat -s Confianza            # qué certificados se verifican
+adb forward tcp:9222 localabstract:$(adb shell cat /proc/net/unix | grep -o 'webview_devtools_remote_[0-9]*' | tail -1)
+# luego abre chrome://inspect en Chrome y pulsa «inspect» en el WebView de la app
+```
+
 ## Modo noche y cuidado de la tablet
 
 - **Modo noche** (de 22:00 a 6:00, o con el botón de la luna del Dock): pantalla negra con solo la
