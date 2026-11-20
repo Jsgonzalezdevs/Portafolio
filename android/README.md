@@ -109,15 +109,30 @@ verificación de certificado de arriba: 4-5 s solo para recibir 100 KB).
 Resultado (arranque en frío, `am start` → panel a la vista): de ~9-10 s a ~3 s con el sistema caliente (~9 s justo tras encender
 la tablet o instalar, por el WebView y el caché de archivos fríos).
 
-### Lo que no se arregla desde la app
+### Lo que no se arregla desde la app (y qué se hizo por cable)
 
-Con la tablet en reposo, **la app de Google (`googlequicksearchbox:search`) gasta 30-38 % de CPU y ~110 MB** (es el
-servicio de asistente / «Ok Google» en segundo plano) y el sistema está en estado de memoria «crítico» (zRAM
-casi llena, `kswapd` trabajando). Detenerla (`adb shell am force-stop com.google.android.googlequicksearchbox`) baja el
-arranque del WebView de 3,9 s a 2,2 s, pero vuelve sola. Para quitarla de verdad, en la tablet:
-Ajustes › Apps › (engranaje) › **Asistente y entrada de voz › Asistente › Ninguno**, y en la app Google: Ajustes › Voz ›
-«Ok Google» › desactivar. El reconocimiento de voz del botón de micrófono sigue funcionando (es otro servicio de la
-misma app). También ayuda quitar apps que no se usan (Fotos, Vídeos, antivirus…).
+Con la tablet en reposo, **la app de Google (`googlequicksearchbox:search`) llegó a gastar 30-38 % de CPU y ~110 MB** (servicio de
+asistente / «Ok Google» en segundo plano) y el sistema está casi siempre en memoria «crítica» (zRAM llena, `kswapd`
+trabajando). Detenerla (`am force-stop`) bajaba el arranque del WebView de 3,9 s a 2,2 s, pero volvía sola.
+
+Hecho por cable el 2026-11-20 (equivale a Ajustes › Asistente y entrada de voz › Asistente › **Ninguno**):
+
+```bash
+adb shell "settings put secure voice_interaction_service ''"
+adb shell "settings put secure assistant ''"
+```
+
+Para deshacerlo (valores de antes):
+
+```bash
+adb shell settings put secure voice_interaction_service com.google.android.googlequicksearchbox/com.google.android.voiceinteraction.GsaVoiceInteractionService
+adb shell settings delete secure assistant
+```
+
+El reconocimiento del botón de micrófono no se toca (`voice_recognition_service` sigue siendo el de Google). El sistema sigue
+mostrando el servicio ligado hasta que se reinicie la tablet. Esta ROM **no deja** desactivar apps ni componentes por cable
+(`pm disable-user` da `SecurityException`): quitar Fotos, Vídeos, Música, Hangouts, Google+ y el antivirus hay que hacerlo en
+Ajustes › Apps. Con el sistema en calma el arranque en frío medido fue de **1,8 s** hasta el panel a la vista.
 
 ## Emparejar la tablet desde la Mac por cable
 
