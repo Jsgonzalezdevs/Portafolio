@@ -251,24 +251,48 @@ export function iniciarAgenda({ emparejamiento, alNoAutorizado, hablar, desperta
 
   /** Repinta con lo guardado (sin red), para que «pasado / ahora» avance con el reloj. */
   function repintar() {
+    if (porCompletar.size) return;
     const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
     if (guardado && !tarjeta.hidden) pintar(guardado.valor, ultimaCargaOk ? null : guardado.en);
   }
   let ultimaCargaOk = false;
 
   // ---------- Completar recordatorios con un toque ----------
+  // Completar no se puede deshacer en la Mac: se esperan unos segundos, y tocar otra vez lo cancela.
+  const ESPERA_DESHACER_MS = 4000;
+  const porCompletar = new Map<string, number>();
+
   contenedorRecordatorios?.addEventListener('click', (ev) => {
     const li = (ev.target as HTMLElement).closest<HTMLLIElement>('li[data-id]');
-    if (!li || li.classList.contains('hecho')) return;
+    if (!li) return;
     const id = li.dataset.id!;
-    li.classList.add('hecho');
-    // Se quita de lo guardado al momento: con la Mac apagada ya no vuelve a salir ni a avisar.
-    const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
-    if (guardado) {
-      guardarCache(CLAVES.agenda, { ...guardado.valor, recordatorios: guardado.valor.recordatorios.filter((r) => r.id !== id) });
+    const fecha = li.querySelector('time');
+    const pendiente = porCompletar.get(id);
+    if (pendiente !== undefined) {
+      // Deshacer.
+      clearTimeout(pendiente);
+      porCompletar.delete(id);
+      li.classList.remove('hecho');
+      if (fecha) fecha.textContent = fecha.dataset.antes ?? '';
+      return;
     }
-    if (cuentaRecordatorios) cuentaRecordatorios.textContent = String(Math.max(0, Number(cuentaRecordatorios.textContent) - 1));
-    void completar(id).then(() => window.setTimeout(() => (li.isConnected ? repintar() : undefined), 900));
+    li.classList.add('hecho');
+    if (fecha) {
+      fecha.dataset.antes = fecha.textContent ?? '';
+      fecha.textContent = 'Deshacer';
+    }
+    porCompletar.set(
+      id,
+      window.setTimeout(() => {
+        porCompletar.delete(id);
+        // Se quita de lo guardado: con la Mac apagada ya no vuelve a salir ni a avisar.
+        const guardado = leerCache<RespuestaAgenda>(CLAVES.agenda);
+        if (guardado) {
+          guardarCache(CLAVES.agenda, { ...guardado.valor, recordatorios: guardado.valor.recordatorios.filter((r) => r.id !== id) });
+        }
+        void completar(id).then(() => repintar());
+      }, ESPERA_DESHACER_MS),
+    );
   });
 
   async function completar(id: string) {

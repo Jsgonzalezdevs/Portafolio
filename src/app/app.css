@@ -912,6 +912,8 @@ input:focus { outline: none; border-color: var(--azul); }
 .agenda--recordatorios li[data-id]:active { background: rgba(120, 120, 128, 0.18); }
 .agenda--recordatorios li.hecho::before { border-color: var(--naranja); background: var(--naranja); box-shadow: inset 0 0 0 0.15rem #2c2c2e; }
 .agenda--recordatorios li.hecho span { color: var(--texto-3); text-decoration: line-through; }
+.agenda--recordatorios li.hecho time { color: #6cb6ff; font-weight: 600; }
+.agenda--recordatorios li.hecho time::before { content: none; }
 .agenda--recordatorios .vencido span { color: var(--texto); }
 .agenda--recordatorios .vencido time::before { content: 'Vencido · '; }
 
