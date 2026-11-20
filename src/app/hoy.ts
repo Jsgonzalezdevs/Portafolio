@@ -83,6 +83,11 @@ export function estadoDelDia(eventos: EventoDia[], ahora: Date, maxProximos = 3)
   };
 }
 
+/** Lo primero con hora que viene (de hoy o mañana), para la pantalla de noche. */
+export function primeroQueViene(eventos: EventoDia[], ahora: Date): EventoDia | null {
+  return estadoDelDia(eventos, ahora, 1).proximos[0] ?? null;
+}
+
 /** «en 5 min», «en 2 h 27 min», «en 1 h», «ahora». */
 export function enCuanto(ms: number): string {
   const min = Math.ceil(ms / 60_000);

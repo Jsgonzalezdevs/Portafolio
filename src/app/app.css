@@ -970,7 +970,10 @@ input:focus { outline: none; border-color: var(--azul); }
   background: #000;
 }
 /* Solo la hora, en ámbar apagado (menos luz azul, que desvela). */
+.noche__caja { display: flex; flex-direction: column; align-items: center; }
 .noche__hora { font-size: 8rem; font-weight: 200; color: #7a4e2c; font-variant-numeric: tabular-nums; }
+/* Lo justo para dormir tranquilo: cuándo suena la alarma y con qué empieza el día. Más tenue que la hora. */
+.noche__info { margin-top: 0.35rem; font-size: 1.05rem; color: #4d321d; font-variant-numeric: tabular-nums; }
 /* De noche el panel de debajo no se pinta ni se calcula: menos CPU, menos calor y nada de luz. */
 .noche-activa .panel, .noche-activa #fondo-mac { display: none; }
 

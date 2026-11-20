@@ -28,13 +28,13 @@ import {
 } from './alarmas';
 import { borrarCache, CLAVES, guardarCache, hace, leerCache } from './almacen';
 import { obtenerClima, type Clima } from './clima';
-import { finDelDia, horaHablada, inicioDelDia, normalizar, proximaAlarma, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
-import { enCuanto, estadoDelDia, quedan, respuestaAgenda } from './hoy';
+import { finDelDia, horaHablada, inicioDelDia, normalizar, paraVoz, proximaAlarma, resumenManana, resumenNoche, sinRelleno } from '../../mac-agent/src/hablar';
+import { enCuanto, estadoDelDia, primeroQueViene, quedan, respuestaAgenda } from './hoy';
 import { duracionHablada, interpretar, responderConsulta } from './comandos';
 import { alFalloDeVoz, audio, callar, diagnosticar, explicar, fijarVozActiva, hablar as hablarWeb, pitido, probar, vozActiva, type Diagnostico } from './sonido';
 import { iniciarChat, puenteNativo } from './chat';
 import { aplicarVidrio, iniciarVidrio, limpiarVidrio, pedirAlineacion } from './vidrio';
-import { consejoBateria, estadoCarga, leerBateria, seguimientoAlMaximo, type Bateria } from './bienestar';
+import { anotarMuestra, consejoBateria, estadoCarga, leerBateria, ritmoPorHora, seguimientoAlMaximo, type Bateria, type Muestra } from './bienestar';
 import { desplazamientoHora, nocheActiva } from './noche';
 import { claveDia, debeResumirManana, duracionAviso, efectosConocidos } from './rutinas';
 import { bytes, duracion, formatoTiempoPista, formatoTiempoTimer, formatoTokens, porcentaje, saludoSegunHora } from './formato';
@@ -115,6 +115,9 @@ if (puenteNativo() || ((navigator as Navigator & { deviceMemory?: number }).devi
 
 let emparejamiento: Emparejamiento | null = null;
 let paginaActual = 'inicio';
+const CLAVE_MUESTRAS = 'asistente.bateriaMuestras';
+let bateriaEnchufadaAntes: boolean | null = null;
+let bateriaTablet: Bateria | null = null;
 let cerrarFlujo: (() => void) | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
 let tocandoVolumen = false;
@@ -288,7 +291,8 @@ function pintarReloj() {
   if (nocheAplicada) {
     // Un poco de movimiento cada minuto: un LCD que muestra lo mismo toda la noche puede marcarse.
     const d = desplazamientoHora(ahora);
-    $('noche-hora').style.transform = `translate(${d.x}rem, ${d.y}rem)`;
+    $('noche-caja').style.transform = `translate(${d.x}rem, ${d.y}rem)`;
+    pintarNocheInfo(ahora);
   }
 
   actualizarAhora();
@@ -306,6 +310,18 @@ let flujoLento = false;
  * Única función que enciende y apaga el modo noche. De noche: pantalla negra con solo la hora,
  * panel de debajo sin pintar, brillo al mínimo (en la app Android) y consultas a la Mac cada 30 s.
  */
+/** Bajo la hora de noche: cuándo suena la próxima alarma y con qué empieza el día. */
+function pintarNocheInfo(ahora: Date) {
+  const alarma = proximaAlarma(estadoAlarmas.alarmas, ahora);
+  const elAlarma = $('noche-alarma');
+  elAlarma.hidden = !alarma;
+  if (alarma) elAlarma.textContent = `⏰ ${formatoHora.format(alarma)} · ${enCuanto(alarma.getTime() - ahora.getTime())}`;
+  const primero = primeroQueViene(agendaGuardada() ?? [], ahora);
+  const elPrimero = $('noche-primero');
+  elPrimero.hidden = !primero;
+  if (primero) elPrimero.textContent = `${mismoDia(new Date(primero.inicio), ahora) ? 'Luego' : 'Mañana'}: ${formatoHora.format(new Date(primero.inicio))} ${paraVoz(primero.titulo)}`;
+}
+
 function aplicarNoche() {
   const activa = nocheActiva({ manual: nocheManual, ahora: new Date(), despiertoHasta, emparejado: Boolean(emparejamiento) });
   $('noche').hidden = !activa;
@@ -316,6 +332,7 @@ function aplicarNoche() {
   // La app bajó una versión nueva del panel: de noche nadie lo usa, es el momento de estrenarla.
   if (activa && puenteNativo()?.webNueva?.()) window.setTimeout(() => puenteNativo()?.recargar?.(), 5_000);
   ritmoEstado(activa);
+  if (activa) pintarNocheInfo(new Date());
   if (!activa) pedirAlineacion();
 }
 
@@ -1766,7 +1783,6 @@ iniciarChat({
 
 // ---------- Cuidado de la tablet ----------
 const CLAVE_MAXIMO = 'asistente.alMaximoDesde';
-let bateriaTablet: Bateria | null = null;
 
 function leerMaximoDesde(): number | null {
   try {
@@ -1799,7 +1815,24 @@ function pintarTablet(b: Bateria | null) {
   const ahora = Date.now();
   const desde = seguimientoAlMaximo(b, leerMaximoDesde(), ahora);
   guardarMaximoDesde(desde);
-  const consejo = consejoBateria(b, desde, ahora);
+  // El ritmo (sube o baja por hora) se recuerda entre recargas: así se nota un cargador que no alcanza.
+  let muestras: Muestra[] = [];
+  try {
+    muestras = JSON.parse(localStorage.getItem(CLAVE_MUESTRAS) ?? '[]') as Muestra[];
+  } catch {
+    /* sin almacenamiento */
+  }
+  // Si se enchufó o desenchufó, el ritmo de antes ya no dice nada.
+  if (bateriaEnchufadaAntes !== null && bateriaEnchufadaAntes !== b.enchufada) muestras = [];
+  bateriaEnchufadaAntes = b.enchufada;
+  muestras = anotarMuestra(muestras, b.nivel, ahora);
+  try {
+    localStorage.setItem(CLAVE_MUESTRAS, JSON.stringify(muestras));
+  } catch {
+    /* sin almacenamiento */
+  }
+  const ritmo = ritmoPorHora(muestras, ahora);
+  const consejo = consejoBateria(b, desde, ahora, ritmo);
 
   tarjeta.hidden = false;
   item.hidden = false;
@@ -1814,7 +1847,7 @@ function pintarTablet(b: Bateria | null) {
     consejo.tono === 'alerta' ? COLOR.rojo : consejo.tono === 'aviso' ? COLOR.naranja : b.nivel <= 30 && !b.enchufada ? COLOR.naranja : COLOR.verde,
   );
   const temperatura = b.temperaturaC !== null ? ` · ${Math.round(b.temperaturaC)} °C` : '';
-  $('tablet-estado').textContent = `${estadoCarga(b)}${temperatura}`;
+  $('tablet-estado').textContent = `${estadoCarga(b, ritmo)}${temperatura}`;
   const textoConsejo = $('tablet-consejo');
   textoConsejo.textContent = consejo.texto;
   textoConsejo.dataset.tono = consejo.tono;
