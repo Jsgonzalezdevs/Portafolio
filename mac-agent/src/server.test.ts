@@ -8,7 +8,7 @@ import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { GestorAlarmas } from './alarmas.ts';
 import type { Config } from './config.ts';
 import type { EstadoMac } from './estado.ts';
-import { crearServidor } from './server.ts';
+import { crearServidor, esRedPrivada } from './server.ts';
 
 const TOKEN = 'a'.repeat(64);
 const ORIGEN = 'https://juliangonzalez.lat';
@@ -474,4 +474,26 @@ test('el catálogo trae el nombre para que la tablet salude sola', async () => {
 test('bloquea tras demasiados tokens inválidos', async () => {
   for (let i = 0; i < 10; i++) await fetch(`${base}/estado`, { headers: { Authorization: 'Bearer x' } });
   assert.equal((await fetch(`${base}/estado`, { headers: auth })).status, 429);
+});
+
+test('red local: solo se atiende a equipos de redes privadas', () => {
+  for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.5', '172.16.12.225', '172.31.255.1', '192.168.1.40', '169.254.3.3', '::ffff:192.168.0.9', 'fd12:3456::1', 'fe80::1']) {
+    assert.equal(esRedPrivada(ip), true, ip);
+  }
+  for (const ip of ['8.8.8.8', '172.15.0.1', '172.32.0.1', '192.169.0.1', '11.0.0.1', '104.16.230.132', '2606:4700::1', '', 'basura']) {
+    assert.equal(esRedPrivada(ip), false, ip);
+  }
+  assert.equal(esRedPrivada(undefined), false);
+});
+
+test('red local: el navegador puede preguntar por Private Network Access y se le deja pasar', async () => {
+  const sin = await fetch(`${base}/estado`, { method: 'OPTIONS', headers: { Origin: ORIGEN, 'Access-Control-Request-Method': 'GET' } });
+  assert.equal(sin.status, 204);
+  assert.equal(sin.headers.get('access-control-allow-private-network'), null);
+  const con = await fetch(`${base}/estado`, {
+    method: 'OPTIONS',
+    headers: { Origin: ORIGEN, 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Private-Network': 'true' },
+  });
+  assert.equal(con.status, 204);
+  assert.equal(con.headers.get('access-control-allow-private-network'), 'true');
 });

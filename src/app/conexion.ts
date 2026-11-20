@@ -88,6 +88,15 @@ export async function consultarAgentePublicado(token: string): Promise<string | 
   }
 }
 
+/** Una dirección http:// es la de la red local, escrita a propósito: no se cambia por la del túnel. */
+export const esDireccionLocal = (agente: string): boolean => agente.startsWith('http://');
+
+/** Busca la dirección publicada del túnel, salvo que la tablet esté fija a una dirección de la red local. */
+export async function redescubrirAgente(e: Pick<Emparejamiento, 'agente' | 'token'>): Promise<string | null> {
+  if (esDireccionLocal(e.agente)) return null;
+  return consultarAgentePublicado(e.token);
+}
+
 /** Error de «aún no sé dónde está la Mac»: se trata como Mac sin conexión. */
 export class ErrorSinAgente extends Error {}
 
@@ -115,7 +124,7 @@ export async function llamar<T>(e: Emparejamiento, ruta: string, cuerpo?: unknow
   } catch (err) {
     if (err instanceof ErrorNoAutorizado) throw err;
     // Si la llamada falló por caída de red o túnel cerrado, intenta actualizar la dirección
-    const nuevaUrl = await consultarAgentePublicado(e.token);
+    const nuevaUrl = await redescubrirAgente(e);
     if (nuevaUrl && nuevaUrl !== e.agente) {
       e.agente = nuevaUrl;
       guardarEmparejamiento(e);
@@ -226,7 +235,7 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
     } catch {
       clearTimeout(vigilante);
       op.alCambioConexion('sin-conexion');
-      void consultarAgentePublicado(e.token).then((nuevaUrl) => {
+      void redescubrirAgente(e).then((nuevaUrl) => {
         if (nuevaUrl && nuevaUrl !== e.agente) {
           e.agente = nuevaUrl;
           guardarEmparejamiento(e);
@@ -282,7 +291,7 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
     }
     op.alCambioConexion('sin-conexion');
     if (!abierta) {
-      void consultarAgentePublicado(e.token).then((nuevaUrl) => {
+      void redescubrirAgente(e).then((nuevaUrl) => {
         if (nuevaUrl && nuevaUrl !== e.agente) {
           e.agente = nuevaUrl;
           guardarEmparejamiento(e);

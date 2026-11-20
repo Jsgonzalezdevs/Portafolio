@@ -21,6 +21,7 @@ import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
+import android.webkit.WebSettings
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -65,6 +66,8 @@ class MainActivity : Activity() {
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.setSupportZoom(false)
+            // La página es https y la Mac, en la red local, http://IP:8787 (ver «redLocal» en el agente).
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             settings.allowFileAccess = false
             webViewClient = Cliente()
             addJavascriptInterface(Puente(), "AndroidAsistente")

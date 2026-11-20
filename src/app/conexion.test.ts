@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { abrirFlujo, crearParserSSE, emparejamientoDesdeHash, normalizarAgente, type EventoSSE } from './conexion';
+import { abrirFlujo, crearParserSSE, emparejamientoDesdeHash, esDireccionLocal, normalizarAgente, redescubrirAgente, type EventoSSE } from './conexion';
 import { duracion, esDeNoche, porcentaje } from './formato';
 
 describe('parser SSE', () => {
@@ -10,6 +10,31 @@ describe('parser SSE', () => {
       { evento: 'estado', datos: '{"a":1}' },
       { evento: 'estado', datos: '2' },
     ]);
+  });
+});
+
+describe('dirección de la red local', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('una dirección http:// es de la red local; https:// y vacía no', () => {
+    expect(esDireccionLocal('http://172.16.12.244:8787')).toBe(true);
+    expect(esDireccionLocal('https://algo.trycloudflare.com')).toBe(false);
+    expect(esDireccionLocal('')).toBe(false);
+  });
+
+  it('con dirección local no se busca el túnel (no se pisa lo escrito a propósito)', async () => {
+    const pedir = vi.fn(async () => ({ ok: false }) as Response);
+    vi.stubGlobal('fetch', pedir);
+    expect(await redescubrirAgente({ agente: 'http://172.16.12.244:8787', token: 'abc' })).toBeNull();
+    expect(pedir).not.toHaveBeenCalled();
+  });
+
+  it('con túnel o sin dirección sí se busca la publicada', async () => {
+    const pedir = vi.fn(async () => ({ ok: false }) as Response);
+    vi.stubGlobal('fetch', pedir);
+    await redescubrirAgente({ agente: 'https://viejo.trycloudflare.com', token: 'abc' });
+    await redescubrirAgente({ agente: '', token: 'abc' });
+    expect(pedir).toHaveBeenCalledTimes(2);
   });
 });
 

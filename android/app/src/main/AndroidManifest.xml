@@ -12,6 +12,7 @@
         </intent>
     </queries>
 
+    <!-- usesCleartextTraffic: la tablet puede hablar con la Mac por la red local (http://IP:8787, modo «redLocal» del agente). -->
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_asistente"
@@ -19,7 +20,7 @@
         android:largeHeap="false"
         android:supportsRtl="false"
         android:theme="@style/Tema"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { crearAcciones, ErrorDeAccion } from './acciones.ts';
 import { agendaInstalada, Avisador, fechaLocal, type Agenda } from './agenda.ts';
@@ -39,6 +39,26 @@ function calcularSaludo(fecha: Date): string {
   if (h >= 6 && h < 12) return 'Buenos días';
   if (h >= 12 && h < 18) return 'Buenas tardes';
   return 'Buenas noches';
+}
+
+/** ¿Viene de esta misma Mac o de una red privada (10.x, 172.16-31.x, 192.168.x, enlace local)? */
+export function esRedPrivada(direccion: string | undefined): boolean {
+  if (!direccion) return false;
+  const ip = direccion.replace(/^::ffff:/i, '');
+  if (ip === '::1' || ip === '127.0.0.1') return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(ip) || /^fe[89ab][0-9a-f]:/i.test(ip)) return true; // IPv6 privada y de enlace local
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+}
+
+/** Las direcciones IPv4 de esta Mac en la red local, para mostrarlas al arrancar. */
+function direccionesLocales(): string[] {
+  return Object.values(networkInterfaces())
+    .flat()
+    .filter((i): i is NonNullable<typeof i> => !!i && i.family === 'IPv4' && !i.internal)
+    .map((i) => i.address);
 }
 
 export function crearServidor({
@@ -155,7 +175,11 @@ export function crearServidor({
     }
   };
 
+  // Si el agente está abierto a la red, solo se atiende a equipos de redes privadas (casa u oficina): nada de internet.
+  const abiertoALaRed = config.redLocal === true || !['127.0.0.1', '::1', 'localhost'].includes(config.host);
+
   const servidor = createServer(async (req, res) => {
+    if (abiertoALaRed && !esRedPrivada(req.socket.remoteAddress)) return void req.socket.destroy();
     const origen = req.headers.origin;
     if (origen) {
       if (!config.origenes.includes(origen)) return json(res, 403, { error: 'Origen no permitido' });
@@ -165,6 +189,8 @@ export function crearServidor({
     }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
+        // Chrome pregunta (Private Network Access) antes de dejar que una página https hable con una IP de la red local.
+        ...(req.headers['access-control-request-private-network'] === 'true' ? { 'Access-Control-Allow-Private-Network': 'true' } : {}),
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '600',
@@ -530,8 +556,12 @@ if (import.meta.main) {
       );
     }, 60_000).unref();
   }
-  servidor.listen(config.puerto, config.host, () => {
-    console.log(`mac-agent escuchando en http://${config.host}:${config.puerto}`);
+  const host = config.redLocal ? '0.0.0.0' : config.host;
+  servidor.listen(config.puerto, host, () => {
+    console.log(`mac-agent escuchando en http://${host}:${config.puerto}`);
+    if (config.redLocal) {
+      for (const ip of direccionesLocales()) console.log(`Red local: la tablet puede usar http://${ip}:${config.puerto}`);
+    }
     console.log(`Token guardado en mac-agent/.token (o AGENT_TOKEN). Úsalo para emparejar la tablet en /app.`);
   });
   const salir = () => {

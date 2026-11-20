@@ -3,6 +3,7 @@ import {
   abrirFlujo,
   cargarEmparejamiento,
   consultarAgentePublicado,
+  redescubrirAgente,
   emparejamientoDesdeHash,
   ErrorNoAutorizado,
   ErrorSinAgente,
@@ -1820,7 +1821,7 @@ async function arrancar() {
   } catch (e) {
     if (e instanceof ErrorNoAutorizado) return desemparejar('El token ya no es válido. Vuelve a emparejar.');
     // Si la URL del túnel cambió, busca automáticamente la nueva publicada en la nube
-    const nuevaUrl = await consultarAgentePublicado(guardado.token);
+    const nuevaUrl = await redescubrirAgente(guardado);
     if (nuevaUrl && nuevaUrl !== guardado.agente) {
       guardado.agente = nuevaUrl;
       guardarEmparejamiento(guardado);
@@ -1844,7 +1845,7 @@ async function arrancar() {
 async function arrancarDeNuevo(e: Emparejamiento) {
   if (emparejamiento !== e || cerrarFlujo) return;
   try {
-    const nuevaUrl = await consultarAgentePublicado(e.token);
+    const nuevaUrl = await redescubrirAgente(e);
     if (nuevaUrl && nuevaUrl !== e.agente) {
       e.agente = nuevaUrl;
       guardarEmparejamiento(e);

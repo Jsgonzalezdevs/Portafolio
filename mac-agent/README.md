@@ -312,6 +312,28 @@ sudo cloudflared service install
 
 Si usas otro dominio u origen, añádelo a `origenes` en `config.json` (CORS).
 
+## Red local (sin túnel ni internet)
+
+Si la Mac y la tablet están en la misma red (wifi de casa u oficina), la tablet puede hablar **directo** con la
+Mac. Sirve sobre todo cuando el túnel no existe: algunas redes (p. ej. la de una oficina) cortan la conexión con
+Cloudflare y el agente no puede publicar su dirección.
+
+1. En `config.json` del agente pon `"redLocal": true` y reinicia (`zsh mac-agent/scripts/instalar.sh`). El
+   agente escucha en todas las interfaces, pero **solo atiende a equipos de redes privadas** (10.x, 172.16-31.x,
+   192.168.x): nada que venga de internet. Sigue pidiendo el token y bloqueando tras intentos fallidos. Al
+   arrancar imprime las direcciones, p. ej. `Red local: la tablet puede usar http://172.16.12.244:8787`.
+2. En la tablet, al emparejar, escribe esa dirección en **Dirección** (con `http://`) y pega el token.
+3. Una dirección `http://` queda fija: el panel no la cambia por la del túnel.
+
+Ojo:
+- Solo funciona dentro de la **app Android** (permite contenido mixto: la página es https y la Mac, http). Un
+  navegador lo bloquea.
+- El tráfico va **sin cifrar** dentro de esa red, token incluido. Úsalo en redes de confianza y, si has usado
+  una ajena, rota el token después (`rm ~/Library/Application\ Support/mac-agent/.token` y reinicia).
+- La IP de la Mac puede cambiar (DHCP). Si la tablet deja de conectar, mira la IP nueva en el log o fíjala en el
+  router, y vuelve a emparejar con la nueva dirección.
+- Está apagado por defecto (`redLocal: false`).
+
 ## Emparejar la tablet
 
 Abre `https://juliangonzalez.lat/app` en la tablet y pega la URL del agente y el

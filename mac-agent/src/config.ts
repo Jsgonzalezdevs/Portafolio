@@ -54,6 +54,13 @@ export interface Config {
    * que corre en esta misma Mac. Abrirlo a la red local es opcional.
    */
   host: string;
+  /**
+   * Abre el agente a la red local (wifi de casa u oficina) para que la tablet hable directo con la Mac, sin
+   * túnel ni internet: escucha en todas las interfaces, pero solo atiende a equipos de redes privadas
+   * (10.x, 172.16-31.x, 192.168.x). Sigue pidiendo el token. Apagado por defecto: el tráfico va sin cifrar
+   * (http) dentro de esa red, así que úsalo solo en redes de confianza.
+   */
+  redLocal?: boolean;
   /** Orígenes que pueden llamar al agente desde el navegador (CORS). */
   origenes: string[];
   escenas: Escena[];
@@ -104,6 +111,7 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
   const c = { ...PREDETERMINADA, ...(crudo as Partial<Config>) };
   if (!Number.isInteger(c.puerto) || c.puerto < 1 || c.puerto > 65535) throw new Error('config: "puerto" inválido');
   if (typeof c.host !== 'string' || !c.host) throw new Error('config: "host" inválido');
+  if (c.redLocal !== undefined && typeof c.redLocal !== 'boolean') throw new Error('config: "redLocal" debe ser true o false');
   if (!Array.isArray(c.origenes) || !c.origenes.every((o) => typeof o === 'string')) {
     throw new Error('config: "origenes" debe ser una lista de URLs');
   }
@@ -160,7 +168,7 @@ export function validarConfig(crudo: unknown): Omit<Config, 'token'> {
       )
     : PREDETERMINADA.playlistsRapidas;
   const rutinas = validarRutinas((crudo as { rutinas?: unknown } | null)?.rutinas);
-  return { puerto: c.puerto, host: c.host, origenes: c.origenes, escenas: c.escenas, apps: c.apps, playlistsRapidas, asistente, publicar, ciudad, rutinas };
+  return { puerto: c.puerto, host: c.host, redLocal: c.redLocal === true, origenes: c.origenes, escenas: c.escenas, apps: c.apps, playlistsRapidas, asistente, publicar, ciudad, rutinas };
 }
 
 /** Token del dispositivo: AGENT_TOKEN si existe; si no, uno generado y guardado en .token (permisos 600). */

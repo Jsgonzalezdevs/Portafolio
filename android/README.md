@@ -85,6 +85,21 @@ En **Voz**, elige «Personalizada».
 Sin AccessKey todo funciona igual, pero se habla tocando el botón de
 micrófono del chat.
 
+## Emparejar la tablet desde la Mac por cable
+
+Escribir 64 caracteres en la tablet es incómodo. Con el cable: toca el campo **Token** en la tablet y ejecuta tú,
+en la Mac, este comando (el token no se muestra en ninguna parte):
+
+```bash
+~/Library/Android/sdk/platform-tools/adb shell input text "$(cat "$HOME/Library/Application Support/mac-agent/.token")"
+```
+
+La **Dirección** puede quedar vacía (se busca sola por el túnel) o ser `http://IP-de-la-Mac:8787` si usas la red
+local (ver «Red local» en `mac-agent/README.md`). La app permite `http://` y contenido mixto por eso.
+
+Arranque en frío: en esta tablet la app tarda unos 10-15 s en mostrar el panel (arranque de Android + comprobar
+el certificado + descargar la página). Mientras, se ve la pantalla oscura.
+
 ## Certificados en Android 6 (por qué la app lleva dos raíces)
 
 Let's Encrypt cambió su jerarquía y hoy casi todo (juliangonzalez.lat en Vercel, Open-Meteo, GitHub) cuelga de
