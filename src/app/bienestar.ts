@@ -54,7 +54,7 @@ export function anotarMuestra(muestras: Muestra[], nivel: number, ahora: number)
 
 /**
  * Cuántos puntos por hora sube (+) o baja (−) la batería, o null si aún no hay datos suficientes
- * (hace falta un tramo de al menos 10 min y que el nivel se haya movido o lleve 30 min quieto).
+ * (hace falta un tramo de al menos 10 min y un cambio de 2 puntos, o 45 min de datos).
  */
 export function ritmoPorHora(muestras: Muestra[], ahora: number): number | null {
   const vigentes = muestras.filter((m) => ahora - m.t <= VENTANA_MUESTRAS_MS);
@@ -63,7 +63,9 @@ export function ritmoPorHora(muestras: Muestra[], ahora: number): number | null 
   const ultima = vigentes[vigentes.length - 1];
   const tramo = ultima.t - primera.t;
   if (tramo < MIN_TRAMO_MS) return null;
-  if (ultima.nivel === primera.nivel && tramo < 30 * 60_000) return null;
+  // El nivel llega en enteros: un solo punto de cambio en poco tiempo exagera el ritmo (10 → 9 en 16 min
+  // puede ser 1 %/h o 4 %/h). Hace falta un cambio de 2 puntos o 45 min de datos.
+  if (Math.abs(ultima.nivel - primera.nivel) < 2 && tramo < 45 * 60_000) return null;
   return ((ultima.nivel - primera.nivel) / tramo) * 3_600_000;
 }
 

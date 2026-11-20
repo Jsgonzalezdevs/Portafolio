@@ -20,6 +20,9 @@ describe('ritmo de carga', () => {
   it('no opina con poco tramo', () => {
     expect(ritmoPorHora([{ t: 0, nivel: 12 }, { t: 5 * MIN, nivel: 11 }], 5 * MIN)).toBeNull();
     expect(ritmoPorHora([{ t: 0, nivel: 12 }, { t: 20 * MIN, nivel: 12 }], 20 * MIN)).toBeNull();
+    // Un solo punto en 16 min no basta (puede ser casualidad del redondeo).
+    expect(ritmoPorHora([{ t: 0, nivel: 10 }, { t: 16 * MIN, nivel: 9 }], 16 * MIN)).toBeNull();
+    expect(ritmoPorHora([{ t: 0, nivel: 10 }, { t: 50 * MIN, nivel: 9 }], 50 * MIN)).toBeCloseTo(-1.2);
   });
 
   it('calcula puntos por hora', () => {
