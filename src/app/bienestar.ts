@@ -91,6 +91,10 @@ export function consejoBateria(b: Bateria, alMaximoDesde: number | null, ahora: 
       texto: `Enchufada, pero baja ${String(Math.round(-ritmo * 10) / 10).replace('.', ',')} % por hora: ese cargador no alcanza. Usa uno de pared${resta ? ` (le quedan ${resta})` : ''}.`,
     };
   }
+  // Muy baja y enchufada, pero sin pruebas de que suba: no es «todo en orden».
+  if (b.enchufada && b.nivel !== null && b.nivel <= 15 && (ritmo === null || ritmo < 0.5)) {
+    return { tono: 'aviso', texto: `Batería muy baja (${b.nivel} %). Si no sube en un rato, ese cargador no alcanza: usa uno de pared.` };
+  }
   if (b.nivel !== null && b.nivel <= 15 && !b.enchufada) {
     return { tono: 'alerta', texto: `Batería baja (${b.nivel} %${resta ? `, ${resta}` : ''}): conéctala al cargador.` };
   }

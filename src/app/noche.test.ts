@@ -55,7 +55,9 @@ describe('cuidado de la batería', () => {
   it('batería baja sin cargador: alerta a 15 % o menos, aviso a 30 %', () => {
     expect(consejoBateria({ ...ok, nivel: 12, enchufada: false }, null, 0).tono).toBe('alerta');
     expect(consejoBateria({ ...ok, nivel: 28, enchufada: false }, null, 0).tono).toBe('aviso');
-    expect(consejoBateria({ ...ok, nivel: 12, enchufada: true }, null, 0).tono).toBe('ok');
+    // Enchufada: «ok» solo si se sabe que sube; si no se sabe aún, aviso (puede que el cargador no alcance).
+    expect(consejoBateria({ ...ok, nivel: 12, enchufada: true }, null, 0, 6).tono).toBe('ok');
+    expect(consejoBateria({ ...ok, nivel: 12, enchufada: true }, null, 0).tono).toBe('aviso');
   });
 
   it('horas seguidas al máximo enchufada → aviso a las 6 h, no antes', () => {

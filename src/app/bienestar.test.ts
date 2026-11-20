@@ -49,7 +49,12 @@ describe('consejo con el ritmo', () => {
   it('cargando de verdad sigue en orden', () => {
     expect(consejoBateria(usb, null, 0, 8).tono).toBe('ok');
     expect(estadoCarga(usb, 8)).toBe('Cargando');
-    expect(consejoBateria(usb, null, 0, null).texto).toBe('Todo en orden.');
+    expect(consejoBateria({ ...usb, nivel: 60 }, null, 0, null).texto).toBe('Todo en orden.');
+    // Muy baja y sin pruebas de que suba: aviso, no «todo en orden».
+    expect(consejoBateria(usb, null, 0, null)).toEqual({
+      tono: 'aviso',
+      texto: 'Batería muy baja (10 %). Si no sube en un rato, ese cargador no alcanza: usa uno de pared.',
+    });
   });
 
   it('sin enchufar dice cuánto le queda', () => {
