@@ -93,11 +93,11 @@ const PREDETERMINADA: Omit<Config, 'token'> = {
   ],
   apps: [],
   playlistsRapidas: [
-    { id: 'enfoque', nombre: 'Enfoque', uri: 'spotify:playlist:37i9dQZF1DXdLEN7aqioXM', icono: '🎯' },
-    { id: 'exitos', nombre: 'Éxitos', uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M', icono: '🔥' },
-    { id: 'chill', nombre: 'Chill', uri: 'spotify:playlist:37i9dQZF1DX4WYpdgoIcn6', icono: '☕' },
-    { id: 'gym', nombre: 'Gym', uri: 'spotify:playlist:37i9dQZF1DX76Wlfdnj7AP', icono: '⚡' },
-    { id: 'lofi', nombre: 'Lo-Fi', uri: 'spotify:playlist:37i9dQZF1DXd9rSDyQguIk', icono: '🎧' },
+    { id: 'colombia', nombre: 'Colombia', uri: 'spotify:playlist:37i9dQZF1DX1EqBIEBVT2f', icono: '🇨🇴' },
+    { id: 'estudiar', nombre: 'Estudiar', uri: 'spotify:playlist:37i9dQZF1DX8omMTgBBTsl', icono: '🧠' },
+    { id: 'tropical', nombre: 'Tropical', uri: 'spotify:playlist:37i9dQZF1DXaxnFG9zIDSx', icono: '🌴' },
+    { id: 'gym', nombre: 'Gym', uri: 'spotify:playlist:37i9dQZF1DX1dHqSjM3WVC', icono: '💪' },
+    { id: 'latinchill', nombre: 'Latin Chill', uri: 'spotify:playlist:37i9dQZF1DX4OzrY981I1W', icono: '🎵' },
   ],
   asistente: { proveedor: 'auto', modelo: 'claude-opus-5-5', modelosGroq: [], esfuerzo: 'low', minutosConversacion: 10, nombre: 'Julian' },
 };
