@@ -1,6 +1,7 @@
 import './app.css';
 import {
   abrirFlujo,
+  type ControlFlujo,
   cargarEmparejamiento,
   consultarAgentePublicado,
   redescubrirAgente,
@@ -119,7 +120,7 @@ let paginaActual = 'inicio';
 const CLAVE_MUESTRAS = 'asistente.bateriaMuestras';
 let bateriaEnchufadaAntes: boolean | null = null;
 let bateriaTablet: Bateria | null = null;
-let cerrarFlujo: (() => void) | null = null;
+let cerrarFlujo: ControlFlujo | null = null;
 let ultimoVolumen: EstadoMac['volumen'] = null;
 let tocandoVolumen = false;
 let ultimoEstadoMac: EstadoMac | null = null;
@@ -1163,6 +1164,10 @@ function pintarConexion(c: EstadoConexion) {
   }
 }
 
+$('btn-reconectar').addEventListener('click', () => {
+  cerrarFlujo?.reconectarAhora();
+});
+
 // ---------- Acciones ----------
 async function accion(id: string, params: Record<string, unknown> = {}, boton?: HTMLButtonElement) {
   if (!emparejamiento) return;
@@ -1584,7 +1589,7 @@ function mostrarEmparejar(error = '') {
 }
 
 function desemparejar(error = '') {
-  cerrarFlujo?.();
+  cerrarFlujo?.detener();
   cerrarFlujo = null;
   emparejamiento = null;
   guardarEmparejamiento(null);
@@ -1645,7 +1650,7 @@ async function iniciar(e: Emparejamiento) {
 
 /** Abre el enlace con la Mac al ritmo que toque (normal, o lento si es de noche). */
 function abrirEstado(e: Emparejamiento) {
-  cerrarFlujo?.();
+  cerrarFlujo?.detener();
   cerrarFlujo = abrirFlujo(e, {
     lento: flujoLento,
     alEvento: (ev) => {

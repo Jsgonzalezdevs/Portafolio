@@ -191,7 +191,13 @@ interface OpcionesFlujo {
  * 15 s callado, se corta y se reconecta (un túnel puede morir sin avisar, y la
  * tablet mostraría datos viejos como si fueran actuales).
  */
-export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
+export interface ControlFlujo {
+  detener: () => void;
+  /** Cancela el backoff actual y reintenta la conexión de inmediato. */
+  reconectarAhora: () => void;
+}
+
+export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): ControlFlujo {
   const T = { primerEvento: 8000, silencio: 15_000, sondeo: op.lento ? 30_000 : 4000, ...op.tiempos };
   let detenido = false;
   let ctrl: AbortController | null = null;
@@ -309,10 +315,21 @@ export function abrirFlujo(e: Emparejamiento, op: OpcionesFlujo): () => void {
   } else {
     void conectar();
   }
-  return () => {
-    detenido = true;
-    clearTimeout(vigilante);
+  const reconectarAhora = () => {
+    if (detenido) return;
     clearTimeout(reintento);
     ctrl?.abort();
+    espera = 2000;
+    if (op.lento) void sondear();
+    else void conectar();
+  };
+  return {
+    detener: () => {
+      detenido = true;
+      clearTimeout(vigilante);
+      clearTimeout(reintento);
+      ctrl?.abort();
+    },
+    reconectarAhora,
   };
 }

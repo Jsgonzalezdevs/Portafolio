@@ -101,14 +101,14 @@ describe('flujo de estado', () => {
     }));
     const eventos: EventoSSE[] = [];
     const conexion: string[] = [];
-    const cerrar = abrirFlujo(e, {
+    const flujo = abrirFlujo(e, {
       alEvento: (ev) => eventos.push(ev),
       alCambioConexion: (c) => conexion.push(c),
       alNoAutorizado: () => {},
       tiempos: { primerEvento: 30, sondeo: 20 },
     });
     await vi.waitFor(() => expect(eventos.length).toBeGreaterThanOrEqual(2), { timeout: 2000 });
-    cerrar();
+    flujo.detener();
     expect(urls[0]).toBe('https://agente.test/eventos');
     expect(urls.slice(1).every((u) => u.endsWith('/estado'))).toBe(true);
     expect(eventos[0]).toEqual({ evento: 'estado', datos: '{"cpuPct":5}' });
@@ -122,7 +122,7 @@ describe('flujo de estado', () => {
       return new Response('event: estado\ndata: {"cpuPct":9}\n\n', { status: 200 });
     }));
     const eventos: EventoSSE[] = [];
-    const cerrar = abrirFlujo(e, {
+    const flujo = abrirFlujo(e, {
       alEvento: (ev) => eventos.push(ev),
       alCambioConexion: () => {},
       alNoAutorizado: () => {},
@@ -130,7 +130,7 @@ describe('flujo de estado', () => {
     });
     await vi.waitFor(() => expect(eventos.length).toBe(1));
     await new Promise((r) => setTimeout(r, 80));
-    cerrar();
+    flujo.detener();
     expect(urls.every((u) => u.endsWith('/eventos'))).toBe(true);
   });
 
@@ -141,7 +141,7 @@ describe('flujo de estado', () => {
       return new Response('{"cpuPct":1}', { status: 200 });
     }));
     const eventos: EventoSSE[] = [];
-    const cerrar = abrirFlujo(e, {
+    const flujo = abrirFlujo(e, {
       alEvento: (ev) => eventos.push(ev),
       alCambioConexion: () => {},
       alNoAutorizado: () => {},
@@ -149,7 +149,7 @@ describe('flujo de estado', () => {
       tiempos: { sondeo: 20 },
     });
     await vi.waitFor(() => expect(eventos.length).toBeGreaterThanOrEqual(2), { timeout: 2000 });
-    cerrar();
+    flujo.detener();
     expect(urls.every((u) => u.endsWith('/estado'))).toBe(true);
     expect(eventos[0]).toEqual({ evento: 'estado', datos: '{"cpuPct":1}' });
   });

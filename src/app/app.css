@@ -170,6 +170,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .conexion[data-estado='en-linea'] .conexion__punto { background: var(--verde); }
 .conexion[data-estado='sin-conexion'] .conexion__punto { background: var(--rojo); }
 .conexion[data-estado='sin-conexion'] { color: #ff8a82; }
+/* Botón reconectar: solo visible cuando sin conexión */
+.conexion__btn-reconectar { display: none; margin-left: 4px; padding: 1px 5px; border: 1px solid #ff8a82; border-radius: 4px; background: rgba(255,80,70,0.15); color: #ff8a82; font-size: 0.75rem; cursor: pointer; line-height: 1; vertical-align: middle; }
+.conexion__btn-reconectar:active { background: rgba(255,80,70,0.35); }
+.conexion[data-estado='sin-conexion'] .conexion__btn-reconectar { display: inline-block; }
 
 /* Pila de la barra de menús */
 .pila {
