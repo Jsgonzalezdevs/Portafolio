@@ -13,7 +13,7 @@
  * Vive en la raíz (/app-sw.js) y no en /app/ porque la página es «/app» sin barra final: un worker dentro
  * de /app/ no la controlaría.
  */
-const VERSION = 'asistente-v1';
+const VERSION = 'asistente-v2';
 const ESPERA_RED_MS = 4000;
 
 /**
