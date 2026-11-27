@@ -60,6 +60,8 @@ export interface Publicado {
   iv: string;
   datos: string;
   actualizado: string;
+  /** Dirección de la Mac en la red local («http://IP:puerto»), cifrada igual; solo con redLocal. */
+  local?: { iv: string; datos: string };
 }
 
 /** Descifra la URL del agente publicada en GitHub usando WebCrypto y el token. */
@@ -75,14 +77,21 @@ export async function descifrarAgente(p: Publicado, token: string): Promise<stri
 
 export const URL_AGENTE_PUBLICADO = 'https://raw.githubusercontent.com/Jsgonzalezdevs/Portafolio/agente/agente.json';
 
-/** Consulta si hay una nueva dirección de túnel publicada en GitHub cifrada con el token. */
-export async function consultarAgentePublicado(token: string): Promise<string | null> {
+/**
+ * Consulta la dirección publicada en GitHub, cifrada con el token: la del túnel o, con `local`,
+ * la de la Mac en la red local (que el DHCP cambia sin aviso).
+ */
+export async function consultarAgentePublicado(token: string, local = false): Promise<string | null> {
   try {
     const res = await fetch(`${URL_AGENTE_PUBLICADO}?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const p = (await res.json()) as Publicado;
-    if (p.v !== 1 || !p.iv || !p.datos) return null;
-    return await descifrarAgente(p, token);
+    if (p.v !== 1) return null;
+    const cifrado = local ? p.local : p;
+    if (!cifrado?.iv || !cifrado.datos) return null;
+    const url = await descifrarAgente({ ...p, iv: cifrado.iv, datos: cifrado.datos }, token);
+    // Una dirección local solo se cambia por otra local (y la del túnel, por otra del túnel).
+    return esDireccionLocal(url) === local ? url : null;
   } catch {
     return null;
   }
@@ -91,10 +100,12 @@ export async function consultarAgentePublicado(token: string): Promise<string | 
 /** Una dirección http:// es la de la red local, escrita a propósito: no se cambia por la del túnel. */
 export const esDireccionLocal = (agente: string): boolean => agente.startsWith('http://');
 
-/** Busca la dirección publicada del túnel, salvo que la tablet esté fija a una dirección de la red local. */
+/**
+ * Busca la dirección publicada más reciente: con dirección de red local, la nueva IP de la Mac
+ * en la red local; si no, la del túnel.
+ */
 export async function redescubrirAgente(e: Pick<Emparejamiento, 'agente' | 'token'>): Promise<string | null> {
-  if (esDireccionLocal(e.agente)) return null;
-  return consultarAgentePublicado(e.token);
+  return consultarAgentePublicado(e.token, esDireccionLocal(e.agente));
 }
 
 /** Error de «aún no sé dónde está la Mac»: se trata como Mac sin conexión. */

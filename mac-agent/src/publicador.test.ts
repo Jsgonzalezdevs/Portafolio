@@ -109,3 +109,63 @@ test('reinicia el túnel solo tras varios fallos seguidos, o si Cloudflare lo di
   await pub.revisar();
   assert.equal(reinicios.length, 2);
 });
+
+test('publica la IP de la red local aunque el túnel no funcione, y la vuelve a publicar si cambia', async () => {
+  const carpetaBase = await mkdtemp(join(tmpdir(), 'pub3-'));
+  const carpeta = join(carpetaBase, 'repo');
+  const pushes: string[][] = [];
+  const run: Ejecutor = async (_bin, args) => {
+    if (args.includes('push')) pushes.push(args);
+    if (args[0] === 'init') {
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(join(args[2], '.git'), { recursive: true });
+    }
+    if (args.includes('rev-parse') && !pushes.length) throw new Error('sin HEAD');
+    return '';
+  };
+  let ip = 'http://172.16.12.244:8787';
+  const pub = new Publicador({
+    token: TOKEN, rutaLog: join(carpetaBase, 'no-existe.log'), carpeta, remoto: 'https://github.com/x/y.git', rama: 'agente', run,
+    comprobar: async () => false,
+    direccionLocal: () => ip,
+  });
+  const leer = async () => JSON.parse(await readFile(join(carpeta, 'agente.json'), 'utf8'));
+
+  assert.equal(await pub.revisar(), 'http://172.16.12.244:8787', 'sin túnel, la local sí se publica');
+  assert.equal(descifrarUrl({ ...(await leer()), ...(await leer()).local }, TOKEN), 'http://172.16.12.244:8787');
+  assert.equal(await pub.revisar(), null, 'misma IP: nada que publicar');
+
+  ip = 'http://172.16.12.237:8787';
+  assert.equal(await pub.revisar(), 'http://172.16.12.237:8787', 'el DHCP cambió la IP: se publica la nueva');
+  const json = await leer();
+  assert.equal(descifrarUrl({ ...json, ...json.local }, TOKEN), 'http://172.16.12.237:8787');
+  assert.equal(pushes.length, 2);
+});
+
+test('al publicar la IP local se conserva la URL del túnel ya publicada', async () => {
+  const carpetaBase = await mkdtemp(join(tmpdir(), 'pub4-'));
+  const carpeta = join(carpetaBase, 'repo');
+  const rutaLog = join(carpetaBase, 'tunel.log');
+  const run: Ejecutor = async (_bin, args) => {
+    if (args[0] === 'init') {
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(join(args[2], '.git'), { recursive: true });
+    }
+    return '';
+  };
+  let viva = true;
+  let ip = 'http://10.0.0.5:8787';
+  const pub = new Publicador({
+    token: TOKEN, rutaLog, carpeta, remoto: 'https://github.com/x/y.git', rama: 'agente', run,
+    comprobar: async () => viva,
+    direccionLocal: () => ip,
+  });
+  await writeFile(rutaLog, 'https://uno.trycloudflare.com\n');
+  assert.equal(await pub.revisar(), 'https://uno.trycloudflare.com');
+  viva = false;
+  ip = 'http://10.0.0.9:8787';
+  assert.equal(await pub.revisar(), 'http://10.0.0.9:8787');
+  const json = JSON.parse(await readFile(join(carpeta, 'agente.json'), 'utf8'));
+  assert.equal(descifrarUrl(json, TOKEN), 'https://uno.trycloudflare.com');
+  assert.equal(descifrarUrl({ ...json, ...json.local }, TOKEN), 'http://10.0.0.9:8787');
+});

@@ -1676,7 +1676,7 @@ $<HTMLFormElement>('form-emparejar').addEventListener('submit', async (ev) => {
     const token = $<HTMLInputElement>('campo-token').value.trim();
     const escrito = $<HTMLInputElement>('campo-agente').value.trim();
     // Vacío (lo normal): se busca la dirección publicada por la Mac.
-    const agente = escrito ? normalizarAgente(escrito) : await consultarAgentePublicado(token);
+    const agente = escrito ? normalizarAgente(escrito) : ((await consultarAgentePublicado(token)) ?? (await consultarAgentePublicado(token, true)));
     if (!agente) throw new ErrorSinAgente('No encontrada');
     await iniciar({ agente, token });
   } catch (e) {
@@ -2059,7 +2059,7 @@ async function arrancar() {
     aplicarNoche();
   }
   // Solo con el token: la dirección de la Mac se descubre de la publicada (cifrada).
-  if (!guardado.agente) guardado.agente = (await consultarAgentePublicado(guardado.token)) ?? '';
+  if (!guardado.agente) guardado.agente = (await consultarAgentePublicado(guardado.token)) ?? (await consultarAgentePublicado(guardado.token, true)) ?? '';
   try {
     await iniciar(guardado);
   } catch (e) {

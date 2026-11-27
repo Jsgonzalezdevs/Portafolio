@@ -13,6 +13,17 @@ describe('parser SSE', () => {
   });
 });
 
+/** Cifra como el publicador de la Mac (AES-GCM con SHA-256 del token). */
+async function cifrar(url: string, token: string) {
+  const enc = new TextEncoder();
+  const material = await crypto.subtle.digest('SHA-256', enc.encode(`mac-agent/url/v1:${token}`));
+  const clave = await crypto.subtle.importKey('raw', material, 'AES-GCM', false, ['encrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const datos = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, clave, enc.encode(url)));
+  const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+  return { iv: b64(iv), datos: b64(datos) };
+}
+
 describe('dirección de la red local', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -22,11 +33,22 @@ describe('dirección de la red local', () => {
     expect(esDireccionLocal('')).toBe(false);
   });
 
-  it('con dirección local no se busca el túnel (no se pisa lo escrito a propósito)', async () => {
-    const pedir = vi.fn(async () => ({ ok: false }) as Response);
-    vi.stubGlobal('fetch', pedir);
-    expect(await redescubrirAgente({ agente: 'http://172.16.12.244:8787', token: 'abc' })).toBeNull();
-    expect(pedir).not.toHaveBeenCalled();
+  it('con dirección local busca la IP local publicada, nunca el túnel', async () => {
+    const token = 'abc';
+    const publicado = {
+      v: 1,
+      actualizado: '',
+      ...(await cifrar('https://tunel.trycloudflare.com', token)),
+      local: await cifrar('http://172.16.12.237:8787', token),
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => publicado }) as Response));
+    expect(await redescubrirAgente({ agente: 'http://172.16.12.244:8787', token })).toBe('http://172.16.12.237:8787');
+    expect(await redescubrirAgente({ agente: 'https://viejo.trycloudflare.com', token })).toBe('https://tunel.trycloudflare.com');
+
+    // Sin IP local publicada (Mac vieja o sin redLocal): no se toca la dirección.
+    const sinLocal = { ...publicado, local: undefined };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => sinLocal }) as Response));
+    expect(await redescubrirAgente({ agente: 'http://172.16.12.244:8787', token })).toBeNull();
   });
 
   it('con túnel o sin dirección sí se busca la publicada', async () => {

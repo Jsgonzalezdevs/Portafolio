@@ -61,6 +61,15 @@ function direccionesLocales(): string[] {
     .map((i) => i.address);
 }
 
+/** «http://IP:puerto» de la Mac en la red local (prefiere el wifi/ethernet en0); null si no hay red. */
+export function direccionLocalPrincipal(puerto: number, interfaces = networkInterfaces()): string | null {
+  const candidatas = Object.entries(interfaces)
+    .sort(([a], [b]) => Number(b === 'en0') - Number(a === 'en0'))
+    .flatMap(([, lista]) => lista ?? [])
+    .filter((i) => i.family === 'IPv4' && !i.internal && esRedPrivada(i.address) && !i.address.startsWith('169.254.'));
+  return candidatas.length ? `http://${candidatas[0].address}:${puerto}` : null;
+}
+
 export function crearServidor({
   config,
   monitor,
@@ -540,6 +549,8 @@ if (import.meta.main) {
       remoto: config.publicar.remoto,
       rama: config.publicar.rama,
       run: ejecutar,
+      // Con redLocal la tablet puede estar fijada a la IP de la Mac, que el DHCP cambia sin aviso.
+      direccionLocal: config.redLocal ? () => direccionLocalPrincipal(config.puerto) : undefined,
       log,
     });
     const publicar = () => publicador.revisar().catch((e: Error) => log(`publicar dirección: ${e.message}`));

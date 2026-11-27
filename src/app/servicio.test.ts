@@ -17,7 +17,7 @@ function cargar(red: (p: Peticion) => Promise<unknown>) {
       add: async (url: string) => void guardado.set(`${ORIGEN}${url}`, await red({ method: 'GET', url: `${ORIGEN}${url}`, mode: 'cors' })),
     }),
     match: async (p: Peticion | string) => guardado.get(typeof p === 'string' ? `${ORIGEN}${p}` : p.url),
-    keys: async () => ['asistente-v0', 'asistente-v1', 'otra-cosa'],
+    keys: async () => ['asistente-v0', 'asistente-v2', 'otra-cosa'],
     delete: vi.fn(async () => true),
   };
   const self = {

@@ -55,6 +55,8 @@ interface Opciones {
   rama: string;
   run: Ejecutor;
   comprobar?: (url: string) => Promise<boolean>;
+  /** «http://IP:puerto» de la Mac en la red local (opción redLocal), o null si no hay. */
+  direccionLocal?: () => string | null;
   log?: (linea: string) => void;
 }
 
@@ -71,6 +73,7 @@ export const FALLOS_PARA_REINICIAR = 3;
 
 export class Publicador {
   private publicada: string | null = null;
+  private publicadaLocal: string | null = null;
   private fallosSeguidos = 0;
   private readonly o: Opciones;
 
@@ -92,8 +95,8 @@ export class Publicador {
     }
   }
 
-  /** Devuelve la URL si la publicó en esta vuelta; null si no había nada nuevo. */
-  async revisar(): Promise<string | null> {
+  /** URL del túnel si responde; null si no (y lo reinicia si lleva caído varios minutos). */
+  private async tunelVivo(): Promise<string | null> {
     const contenido = await readFile(this.o.rutaLog, 'utf8').catch(() => '');
     const url = ultimaUrlDelLog(contenido);
     if (!url) return null;
@@ -118,9 +121,22 @@ export class Publicador {
       return null;
     }
     this.fallosSeguidos = 0;
+    return url;
+  }
 
-    if (url === this.publicada) return null;
-    if (!(await this.comprobar(url))) return null;
+  /**
+   * Publica lo que haya cambiado: la URL del túnel (si responde) y la dirección de la Mac en la red
+   * local (si `direccionLocal` la da). La IP local la reparte el DHCP y cambia sin aviso: sin
+   * publicarla, una tablet fijada a la IP vieja se quedaba «sin conexión» para siempre.
+   * Devuelve lo publicado en esta vuelta (el túnel si cambió, si no la local); null si nada.
+   */
+  async revisar(): Promise<string | null> {
+    const tunel = await this.tunelVivo();
+    const local = this.o.direccionLocal?.() ?? null;
+    const cambiaTunel = tunel !== null && tunel !== this.publicada;
+    const cambiaLocal = local !== null && local !== this.publicadaLocal;
+    if (!cambiaTunel && !cambiaLocal) return null;
+    if (cambiaTunel && !(await this.comprobar(tunel))) return null;
 
     const archivo = join(this.o.carpeta, 'agente.json');
     if (!existsSync(join(this.o.carpeta, '.git'))) {
@@ -128,7 +144,21 @@ export class Publicador {
       await this.git('remote', 'add', 'origin', this.o.remoto);
       await this.git('checkout', '-q', '--orphan', this.o.rama);
     }
-    await writeFile(archivo, `${JSON.stringify(cifrarUrl(url, this.o.token), null, 2)}\n`);
+    // Si el túnel está caído se conserva la última URL publicada (de esta vuelta o del archivo).
+    const anterior = await readFile(archivo, 'utf8').then((t) => JSON.parse(t) as Partial<Publicado>, () => null);
+    const urlTunel = cambiaTunel ? tunel : this.publicada;
+    const base: Partial<Publicado> = urlTunel
+      ? cifrarUrl(urlTunel, this.o.token)
+      : anterior?.iv && anterior.datos
+        ? { v: 1, iv: anterior.iv, datos: anterior.datos }
+        : { v: 1 };
+    const urlLocal = local ?? this.publicadaLocal;
+    const contenido = {
+      ...base,
+      actualizado: new Date().toISOString(),
+      ...(urlLocal ? { local: cifrarUrl(urlLocal, this.o.token) } : {}),
+    };
+    await writeFile(archivo, `${JSON.stringify(contenido, null, 2)}\n`);
     await writeFile(join(this.o.carpeta, 'vercel.json'), VERCEL_JSON);
     await this.git('add', 'agente.json', 'vercel.json');
     const yaHayCommit = await this.git('rev-parse', '--verify', '-q', 'HEAD').then(
@@ -142,8 +172,9 @@ export class Publicador {
       'commit', '-q', ...(yaHayCommit ? ['--amend'] : []), '-m', 'agente: dirección actual (cifrada)',
     );
     await this.git('push', '-q', '-f', 'origin', `HEAD:refs/heads/${this.o.rama}`);
-    this.publicada = url;
-    this.o.log?.(`dirección publicada en la rama ${this.o.rama}`);
-    return url;
+    if (cambiaTunel) this.publicada = tunel;
+    if (cambiaLocal) this.publicadaLocal = local;
+    this.o.log?.(`dirección publicada en la rama ${this.o.rama}${cambiaLocal ? ` (red local ${local})` : ''}`);
+    return cambiaTunel ? tunel : local;
   }
 }
